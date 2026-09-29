@@ -40,11 +40,11 @@ export const look = {
        */
       mist: { radius: [10.5, 10.5] as [number, number], alpha: 0.1, hardness: 0 },
       /**
-       * After the tap (3.02 s) only drips move: from here the canvas is back at
+       * After the tap (2.96 s) only drips move: from here the canvas is back at
        * the screen's DPR (max 2), and the finished drawing is laid again at
        * that size (intro.ts). No drop to low after this.
        */
-      fullResAt: 3.03,
+      fullResAt: 2.97,
     },
   },
   /** At rest: after a resize, the drawing is laid again at the new size once resizing has stopped this long (s) */
@@ -152,16 +152,24 @@ export const look = {
       radius: [7.4, 7.4] as [number, number],
       aspect: [1, 1] as [number, number],
       alpha: 1.4,
-      hardness: 0.35, // between gaussian puff and flat disc: the front builds up, it isn't a hard cap
+      hardness: 0.35, // between gaussian puff and flat disc
       wet: 0.2,
       clip: true,
+      /**
+       * Paint builds up as the cone passes: each step lays `now` of its deposit
+       * at once and the rest over the next `steps` steps, at the same spot. The
+       * head is soft and firms up behind the nozzle (longer at speed, as a
+       * blur would be); the total, and so the finished drawing, is unchanged.
+       */
+      build: { now: 0.1, steps: 8 },
     },
     droplets: {
       share: 0.6, // of look.rate
       sigma: 3.0,
       along: 3.0, // the cone is round
       maxLateral: 4.4,
-      radius: [0.5, 1.6] as [number, number],
+      // Fine grain: the soft head (footprint.build) shows them, where big ones read as bubbles
+      radius: [0.25, 0.7] as [number, number],
       aspect: [1, 1.4] as [number, number], // rotated ellipses, never discs
       alpha: 0.6,
       hardness: 0.4,
@@ -262,8 +270,10 @@ export const look = {
     ],
     /** Droplet opacity: tiny droplets don't cover the wall fully */
     dotAlpha: 0.9,
-    /** The finest cell never under this many device px (at 390 wide 1 unit ~ 1.4 px): all cells scale up together */
+    /** No cell under this many device px (at 390 wide 1 unit ~ 1.4 px): the finest octaves stop there, the coarse keep their size */
     minPx: 1.6,
+    /** Thin fog is fine mist: below `alpha` the dots shrink, to `size` x at alpha 0 (more of them, same mean) */
+    tail: { alpha: 0.12, size: 0.5 },
     fogLo: 0.55,
     fogHi: 0.95,
   },
@@ -291,14 +301,20 @@ export const look = {
    * scaled by r(t) / (weight / 2), all orange (mist and halo included).
    */
   fullStop: {
-    r0: 3,
+    r0: 2,
     r1: 7,
-    /** Overspray around a point is a 2D gaussian, not a line: its own level, tuned to the end frame */
+    /**
+     * The disc spreads as a soft blob: its footprint starts as a pure puff
+     * (this hardness) and reaches the footprint's own by the end of the tap,
+     * so the edge is where the paint has built up, not a circle scaling up.
+     */
+    hardness0: 0,
+    /** Overspray around a point is a 2D gaussian, not a line: its own level */
     oversprayScale: 0.85,
   },
   /**
-   * Drips (notes §6): five fixed drips from reference/strokes.json, start
-   * times in schedule.drips. Drawn by the composite as one soft-edged shape
+   * Drips (notes §6): five fixed drips from reference/strokes.json, timed
+   * by schedule.drips. Drawn by the composite as one soft-edged shape
    * each (trail + bead, antialiased at the screen's resolution), from
    * DripEmitter.state(t); nothing is laid into the paint buffer.
    * Motion: the paint swells at the lip (the bead grows, the neck forms), lets
@@ -328,12 +344,12 @@ export const look = {
     wanderLen: 4,
     straight: 1.5,
     /** Trail width x the spec width: at the top, at the bead (mid-trail ~ the spec) */
-    taper: [1.25, 0.8] as [number, number],
+    taper: [1.1, 0.8] as [number, number],
     /** Trail width variation (+-), over this length (units) */
     widthVar: 0.15,
     widthLen: 2.5,
     /** Neck where the paint leaves the letter: extra width (x the trail width), falloff length (units) */
-    neck: { w: 0.8, len: 1.6 },
+    neck: { w: 0.35, len: 1.3 },
     /** Smooth union of trail and bead, x the bead radius: a teardrop, not a disc on a stick */
     smooth: 0.7,
     /** Beads are ellipses, taller than wide (Tag.astro's static beads: ry / rx = 1.15) */
@@ -414,6 +430,8 @@ export interface LayerLook {
   speedCap?: number;
   /** Fixed splats per simulation step instead of a rate (the footprint) */
   perStep?: number;
+  /** perStep only: lay `now` of each step's deposit at once, the rest spread over the next `steps` steps */
+  build?: { now: number; steps: number };
   sigma: number;
   along: number;
   maxLateral: number;
@@ -426,9 +444,11 @@ export interface LayerLook {
 }
 
 /**
- * Intro schedule (s). Stroke durations come from strokeDuration(length) and
- * match the spec table; `at` is when the nozzle starts moving. Lifts: 0.08 s
- * within a letter, 0.16 s between letters, 0.20 s before the full stop.
+ * Intro schedule (s). `at` is when the nozzle starts moving. A hand doesn't
+ * keep one speed: each stroke has its own duration (average speed in the
+ * comments, units / s), stems flick down, the crossbar is the fastest, the R's
+ * tight turns the slowest. Lifts: 0.08 s within a letter, 0.16 s between
+ * letters, 0.20 s before the full stop.
  */
 export const schedule = {
   ease: 'power1.inOut',
@@ -448,22 +468,41 @@ export const schedule = {
    * ease: this stroke's own speed profile (the crossbar's flying start).
    */
   strokes: [
-    { id: '01', at: 0.0 },
-    { id: '02', at: 0.26 },
-    { id: '03', at: 0.83 },
-    { id: '04', at: 1.09, ease: 'power1.out' }, // crossbar, 0.37 s: flying start, eases at the far right
-    { id: '05', at: 1.62 },
-    { id: '06', at: 1.88 }, // R, bowl and leg, 0.42 s
-    { id: '07', at: 2.46 }, // L, stem and foot, 0.24 s
-    { id: '08', at: 2.9, duration: 0.12 }, // the full stop tap
+    { id: '01', at: 0.0, duration: 0.15 }, // P stem, 467: a quick downstroke
+    { id: '02', at: 0.23, duration: 0.44 }, // P top and bowl, 421: the signature, careful through the hairpin
+    { id: '03', at: 0.83, duration: 0.16 }, // T stem, 468
+    { id: '04', at: 1.07, duration: 0.3, ease: 'power1.out' }, // crossbar, 548, the fastest: flying start, eases at the far right
+    { id: '05', at: 1.53, duration: 0.15 }, // R stem, 400
+    { id: '06', at: 1.76, duration: 0.48 }, // R bowl and leg, 397, the slowest: two tight turns
+    { id: '07', at: 2.4, duration: 0.24 }, // L stem and foot, 445
+    { id: '08', at: 2.84, duration: 0.12 }, // the full stop tap
   ] as { id: string; at: number; duration?: number; ease?: string }[],
-  /** Fixed drips (notes §6): R has none, T has two. 0.10-0.20 s after the stroke above ends; drip-5 as the tap ends */
-  drips: { 'drip-1': 0.28, 'drip-2': 1.16, 'drip-3': 1.61, 'drip-4': 2.85, 'drip-5': 3.02 } as Record<string, number>,
+  /**
+   * Fixed drips (notes §6): R has none, T has two. Each lets go `after` s once
+   * paint lands on it: when the nozzle of `stroke` last passes the drip's top,
+   * or, for the tap, when it ends. The more paint pooled there, the sooner it
+   * goes: the T stem's dwell (drip-2) first, the crossbar's fast, light pass
+   * (drip-3) last. The build script turns these into start times (paths.json).
+   */
+  drips: {
+    'drip-1': { stroke: '01', after: 0.12 }, // P stem's dwell
+    'drip-2': { stroke: '03', after: 0.1 }, // T stem's dwell, the heaviest pool
+    'drip-3': { stroke: '04', after: 0.22 }, // mid-crossbar, starts while the crossbar is still going
+    'drip-4': { stroke: '07', after: 0.18 }, // L foot, the hand barely slows there
+    'drip-5': { stroke: '08', after: 0 }, // the tap is the pool
+  } as Record<string, { stroke: string; after: number }>,
   /** Drips 4 and 5 stop by here: the drawing is finished and stays */
-  end: 3.55,
-  /** Freeze-frame checks (notes §7) */
-  checkpoints: [0.67, 1.46, 2.3, 2.7, 3.02, 3.55],
+  end: 3.5,
+  /** Freeze-frame checks (notes §7): P done, T done, R done, L done, the tap, the end */
+  checkpoints: [0.67, 1.37, 2.24, 2.64, 2.96, 3.5],
 };
 
 /** Duration of a stroke at nozzle speed */
 export const strokeDuration = (length: number) => Math.max(length / look.nozzleSpeed, look.minStroke);
+
+/** Duration of a drip by its length, top to bead centre (look.drips.duration) */
+export function dripDuration(length: number) {
+  const d = look.drips.duration;
+  const f = Math.min(Math.max((length - d.minLength) / (d.maxLength - d.minLength), 0), 1);
+  return d.min + (d.max - d.min) * f;
+}

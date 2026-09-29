@@ -1,14 +1,14 @@
 /**
  * Spray intro entry (the lazily loaded chunk): wires engine, paint,
  * composite and timeline together. boot.ts imports this dynamically.
- * When the drawing is finished (3.60) the canvas keeps it: the composite bakes
+ * When the drawing is finished (schedule.end) the canvas keeps it: the composite bakes
  * it into a texture at the canvas size and everything but that texture, the
  * grain, the mask and the emitters is disposed. On scroll the baked drawing
  * runs and fades. A resize at rest lays the drawing again at the new size
  * (every play lays identical paint). The SVG shows only if the canvas fails.
  */
-import { gsap } from 'gsap';
 import { createComposite } from './composite';
+import { strokeEase } from './ease';
 import { createEngine, type EngineOptions } from './engine';
 import { look, schedule, strokeDuration, type LayerLook } from './look';
 import { createPaint, loadTexture, type Paint } from './paint';
@@ -40,31 +40,6 @@ if (import.meta.env.DEV) {
 
 const root = document.documentElement;
 
-/**
- * Progress -> arc length for a stroke with turns (paths.json, found by the
- * build script): a Hermite curve through (0, 0), each turn at (s / L, s / L)
- * and (1, 1), still at both ends and at the turn's speed (x the stroke's
- * average) at each turn. The hand eases into turns without stopping.
- */
-function turnEase(turns: { at: number; speed: number }[]) {
-  const knots = [
-    { p: 0, s: 0, m: 0 },
-    ...turns.map((t) => ({ p: t.at, s: t.at, m: t.speed })),
-    { p: 1, s: 1, m: 0 },
-  ];
-  return (p: number) => {
-    let i = 0;
-    while (i < knots.length - 2 && p > knots[i + 1].p) i++;
-    const a = knots[i];
-    const b = knots[i + 1];
-    const h = b.p - a.p;
-    const u = Math.min(Math.max((p - a.p) / h, 0), 1);
-    const u2 = u * u;
-    const u3 = u2 * u;
-    return (2 * u3 - 3 * u2 + 1) * a.s + (u3 - 2 * u2 + u) * h * a.m + (-2 * u3 + 3 * u2) * b.s + (u3 - u2) * h * b.m;
-  };
-}
-
 export async function startSpray(opts: EngineOptions) {
   // Context loss (or any engine failure) also stops the timeline and scroll, then shows the SVG
   let teardown = () => {};
@@ -92,7 +67,6 @@ export async function startSpray(opts: EngineOptions) {
   const composite = createComposite(engine, grain);
   const tier = look.tiers[engine.tier];
   const share = look.tiers[engine.tier].splatShare;
-  const ease = gsap.parseEase(schedule.ease);
 
   const emitters: Emitter[] = [];
   const strokeEmitters: StrokeEmitter[] = [];
@@ -107,11 +81,6 @@ export async function startSpray(opts: EngineOptions) {
       .map((l) => (paths.strokes as StrokeData[]).find((s) => s.id === l.id)!)
       .map((l) => ({ points: l.points, half: (l.letter === '.' ? paths.stop.strokeWeight : paths.weight) / 2 }));
     const turns = (stroke as StrokeData & { turns?: { s: number; speed: number }[] }).turns;
-    const strokeEase = turns
-      ? turnEase(turns.map((t) => ({ at: t.s / stroke.length, speed: t.speed })))
-      : slot.ease
-        ? gsap.parseEase(slot.ease)
-        : ease;
     const rampIn = look.flyingStarts.find((f) => f.stroke === slot.id)?.length;
     const stop = stroke.letter === '.';
     // Order is the blend order within a step: overspray first, core on top, speckle last.
@@ -128,14 +97,14 @@ export async function startSpray(opts: EngineOptions) {
       const emitter = new StrokeEmitter(stroke, layer, {
           at: slot.at,
           duration: slot.duration ?? strokeDuration(stroke.length),
-          ease: strokeEase,
+          ease: strokeEase({ length: stroke.length, turns }, slot.ease, schedule.ease),
           share: layer.perStep ? 1 : share,
           orange: stop,
           layerIndex,
           rampIn,
           splits: turns?.map((t) => t.s),
           halfWidth: (stop ? paths.stop.strokeWeight : paths.weight) / 2,
-          tap: stop ? { r0: look.fullStop.r0, r1: look.fullStop.r1 } : undefined,
+          tap: stop ? { r0: look.fullStop.r0, r1: look.fullStop.r1, hardness0: look.fullStop.hardness0 } : undefined,
           alphaScale: stop && !layer.clip && !layer.ring ? look.fullStop.oversprayScale : 1,
           channel: stroke.channel,
           later: layer.avoid !== undefined ? later : undefined,

@@ -50,8 +50,9 @@ uniform float uGrainCell; // grain cell size, logo units (scroll fade)
 uniform float uAa; // logo units per device pixel: antialiasing width
 // Overspray droplets (look.overspray): per octave cell, dot radius min / max (x cell), weight
 uniform vec4 uDrop[3];
-uniform vec4 uDropShape; // haze, cell scale (minPx), fogLo, fogHi
+uniform vec4 uDropShape; // haze, smallest cell (units, minPx), fogLo, fogHi
 uniform float uDotAlpha;
+uniform vec2 uDropTail; // fog alpha below which dots shrink, their size at alpha 0 (x)
 // Drips (DripEmitter.state): x, top, bead bottom, bead radius (0 = off)
 uniform vec4 uDrip[5];
 // trail width, neck 0..1, stretch, length top to bead centre
@@ -92,11 +93,17 @@ float droplets(float a, vec2 world, int seed) {
   float fog = 1.0 - smoothstep(uDropShape.z, uDropShape.w, a);
   if (fog <= 0.0) return a;
   float share = a * (1.0 - uDropShape.x);
+  // Thin fog is fine mist: its dots shrink (and so land more often), not only thin
+  // out, so the far tail has no lone bright dots. The mean is unchanged.
+  float size = mix(uDropTail.y, 1.0, smoothstep(0.0, uDropTail.x, a));
   float miss = 1.0; // 1 - dot coverage here
   float missMean = 1.0; // its expected value
   for (int i = 0; i < 3; i++) {
     vec4 o = uDrop[i];
-    float cell = o.x * uDropShape.y;
+    o.yz *= size;
+    // Each octave keeps its own cell down to the smallest (minPx): small screens lose the
+    // finest dots into the coarser ones instead of scaling every droplet up
+    float cell = max(o.x, uDropShape.y);
     // Mean dot area as a share of the cell (radius uniform in [min, max])
     float area = 3.14159265 * (o.z * o.z * o.z - o.y * o.y * o.y) / (3.0 * (o.z - o.y)) * uDotAlpha;
     float q = min(1.0, share * o.w / area);
@@ -308,8 +315,9 @@ export function createComposite(engine: Engine, grainTex: Texture): Composite {
       uGrainCell: { value: Math.max(look.grain.size, 0.1) }, // set on resize
       uAa: { value: 0.1 },
       uDrop: { value: ov.octaves.map((o) => new Vector4(o.cell, o.r[0], o.r[1], o.weight)) },
-      uDropShape: { value: new Vector4(ov.haze, 1, ov.fogLo, ov.fogHi) },
+      uDropShape: { value: new Vector4(ov.haze, 0, ov.fogLo, ov.fogHi) },
       uDotAlpha: { value: ov.dotAlpha },
+      uDropTail: { value: [ov.tail.alpha, ov.tail.size] },
       uDrip: { value: drips },
       uDripShape: { value: dripShapes },
       uDripMeta: { value: dripMeta },
@@ -342,7 +350,7 @@ export function createComposite(engine: Engine, grainTex: Texture): Composite {
   const offResize = engine.onResize((w) => {
     const unitsPerPx = (VIEW.right - VIEW.left) / w;
     mat.uniforms.uAa.value = unitsPerPx;
-    mat.uniforms.uDropShape.value.y = Math.max(1, (ov.minPx * unitsPerPx) / ov.octaves[0].cell);
+    mat.uniforms.uDropShape.value.y = ov.minPx * unitsPerPx;
     mat.uniforms.uGrainCell.value = Math.max(look.grain.size, look.grain.minPx * unitsPerPx);
   });
 
@@ -381,6 +389,8 @@ export function createComposite(engine: Engine, grainTex: Texture): Composite {
       }
       const scroll = mat.uniforms.uScroll.value;
       mat.uniforms.uScroll.value = 0;
+      // Never sample the target being drawn: a bound uBaked is a feedback loop and WebGL drops the draw
+      mat.uniforms.uBaked.value = blank;
       use(paint);
       engine.renderer.setRenderTarget(baked);
       engine.renderer.render(scene, engine.camera);

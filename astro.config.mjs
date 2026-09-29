@@ -1,13 +1,18 @@
 // @ts-check
+import { existsSync } from 'node:fs';
 import { defineConfig } from 'astro/config';
 
-/** Spray intro tuning bench at /dev/spray: `astro dev` only, never in a build. */
+/** Spray intro tuning bench at /dev/spray, and /dev/compare (two benches side by side): `astro dev` only, never in a build. */
 const sprayBench = {
   name: 'spray-bench',
   hooks: {
     /** @param {{ command: string, injectRoute: (route: { pattern: string, entrypoint: string }) => void }} opts */
     'astro:config:setup': ({ command, injectRoute }) => {
-      if (command === 'dev') injectRoute({ pattern: '/dev/spray', entrypoint: './src/dev/spray-bench.astro' });
+      if (command !== 'dev') return;
+      injectRoute({ pattern: '/dev/spray', entrypoint: './src/dev/spray-bench.astro' });
+      if (existsSync(new URL('./src/dev/spray-compare.astro', import.meta.url))) {
+        injectRoute({ pattern: '/dev/compare', entrypoint: './src/dev/spray-compare.astro' });
+      }
     },
   },
 };

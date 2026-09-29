@@ -7,6 +7,7 @@
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { look, schedule } from './look';
+import paths from './paths.json';
 
 export interface IntroTimeline {
   tl: gsap.core.Timeline;
@@ -19,7 +20,7 @@ export function createIntroTimeline(onUpdate: () => void, onComplete: () => void
   // The clock: an empty tween spanning the paint. Labels mark each stroke.
   tl.to({}, { duration: schedule.end }, 0);
   schedule.strokes.forEach((s) => tl.addLabel(`stroke-${s.id}`, s.at));
-  Object.entries(schedule.drips).forEach(([id, at]) => tl.addLabel(id, at));
+  paths.drips.forEach((d) => tl.addLabel(d.id, d.start));
 
   let resumeOnShow = false;
   const onVisibility = () => {

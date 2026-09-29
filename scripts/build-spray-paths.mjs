@@ -15,13 +15,12 @@ import { fileURLToPath } from 'node:url';
 import { svgPathProperties } from 'svg-path-properties';
 import { Resvg } from '@resvg/resvg-js';
 import { LETTERS_D, STOP_D } from '../src/data/logo.ts';
-import { look, MASK_RECT, schedule, strokeDuration } from '../src/lib/spray/look.ts';
+import { dripDuration, look, MASK_RECT, schedule, strokeDuration } from '../src/lib/spray/look.ts';
+import { strokeEase } from '../src/lib/spray/ease.ts';
 
 const root = (p) => fileURLToPath(new URL(`../${p}`, import.meta.url));
 const r3 = (n) => Math.round(n * 1000) / 1000;
 
-/* The notes' full schedule (s), to flag drift between the centerlines and the timeline */
-const SPEC_DUR = { '01': 0.18, '02': 0.41, '03': 0.18, '04': 0.37, '05': 0.18, '06': 0.42, '07': 0.24, '08': 0.12 };
 
 // 1. Strokes: arc-length samples, plus the sharp turns the hand eases into
 const strokesSvg = readFileSync(root('src/lib/spray/strokes.svg'), 'utf8');
@@ -80,10 +79,46 @@ for (const r of ref.strokes) {
   if (svgD[r.id] !== r.d) throw new Error(`strokes.svg #${r.id} differs from reference/strokes.json`);
 }
 const drips = ref.drips.map((d) => {
-  const start = schedule.drips[d.id];
-  if (start === undefined) throw new Error(`no start time for ${d.id} in look.ts schedule.drips`);
-  return { ...d, start };
+  const timing = schedule.drips[d.id];
+  if (timing === undefined) throw new Error(`no timing for ${d.id} in look.ts schedule.drips`);
+  const landed = paintLands(d, timing.stroke);
+  const start = r3(landed + timing.after);
+  const end = start + dripDuration(d.beadY - d.top);
+  if (end > schedule.end + 1e-6) throw new Error(`${d.id} runs to ${end.toFixed(2)}s, past schedule.end ${schedule.end}s`);
+  return { ...d, landed: r3(landed), start };
 });
+
+/**
+ * When paint lands on a drip (s): the last moment the nozzle of stroke `id` is
+ * at its closest to the drip's top. The tap stays put, so its paint keeps
+ * pooling until it ends.
+ */
+function paintLands(drip, id) {
+  const stroke = strokes.find((s) => s.id === id);
+  const slot = schedule.strokes.find((s) => s.id === id);
+  if (!stroke || !slot) throw new Error(`${drip.id}: no stroke ${id}`);
+  const duration = slot.duration ?? strokeDuration(stroke.length);
+  if (stroke.letter === '.') return slot.at + duration;
+  let best = Infinity;
+  let arc = 0;
+  for (let i = 0; i < stroke.points.length / 2; i++) {
+    const dist = Math.hypot(stroke.points[2 * i] - drip.x, stroke.points[2 * i + 1] - drip.top);
+    if (dist <= best) {
+      best = dist;
+      arc = Math.min(i * look.sampleStep, stroke.length);
+    }
+  }
+  // The ease is monotonic: bisect for the progress where the nozzle reaches arc
+  const ease = strokeEase(stroke, slot.ease, schedule.ease);
+  let lo = 0;
+  let hi = 1;
+  for (let k = 0; k < 40; k++) {
+    const mid = (lo + hi) / 2;
+    if (ease(mid) * stroke.length < arc) lo = mid;
+    else hi = mid;
+  }
+  return slot.at + hi * duration;
+}
 
 const data = {
   weight: ref.strokeWeight,
@@ -470,14 +505,16 @@ function blueNoise(n, sigma = 1.5) {
 }
 
 // 5. Report
-console.log('id  letter  name            length   dur    spec');
+console.log('id  letter  name            length   at     dur    units/s');
 for (const s of strokes) {
-  const dur = s.letter === '.' ? SPEC_DUR[s.id] : strokeDuration(s.length);
-  const flag = Math.abs(dur - SPEC_DUR[s.id]) > 0.02 ? '  <- differs' : '';
-  console.log(
-    `${s.id}  ${s.letter.padEnd(6)}  ${s.name.padEnd(14)}  ${s.length.toFixed(2).padStart(6)}  ${dur.toFixed(2)}   ${SPEC_DUR[s.id].toFixed(2)}${flag}`,
-  );
+  const slot = schedule.strokes.find((x) => x.id === s.id);
+  const dur = slot.duration ?? strokeDuration(s.length);
+  const speed = s.letter === '.' ? '  (tap)' : String(Math.round(s.length / dur)).padStart(7);
+  console.log(`${s.id}  ${s.letter.padEnd(6)}  ${s.name.padEnd(14)}  ${s.length.toFixed(2).padStart(6)}  ${slot.at.toFixed(2)}   ${dur.toFixed(2)}  ${speed}`);
 }
 for (const st of strokes) if (st.turns) console.log(`turns ${st.id}: ${st.turns.map((t) => `s ${t.s} (${t.angle} deg, speed ${t.speed})`).join(', ')}`);
-console.log('drips:', drips.map((d) => `${d.id} x${d.x} ${d.top}(edge ${d.edge})->${d.beadY} @${d.start}s`).join(' | '));
+console.log('drip    paint lands  starts  stops');
+for (const d of drips) {
+  console.log(`${d.id}  ${d.landed.toFixed(2).padStart(11)}  ${d.start.toFixed(2).padStart(6)}  ${(d.start + dripDuration(d.beadY - d.top)).toFixed(2).padStart(5)}`);
+}
 console.log(`points: ${strokes.reduce((n, s) => n + s.points.length / 2, 0)}, mask ${W}x${H} over ${R.w}x${R.h} units`);

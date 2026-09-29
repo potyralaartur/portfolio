@@ -7,7 +7,7 @@
  * The PRNG is seeded per (stroke, layer, step): every play is identical,
  * whatever the frame rate or however the steps fall into frames.
  */
-import { look, type LayerLook } from './look';
+import { dripDuration, look, type LayerLook } from './look';
 
 export interface StrokeData {
   id: string;
@@ -81,8 +81,8 @@ export interface EmitterOptions {
   rampIn?: number;
   /** Half the stroke weight: speckle rings sit beyond this */
   halfWidth: number;
-  /** The full stop: a tap whose disc grows from r0 to r1 over the pass */
-  tap?: { r0: number; r1: number };
+  /** The full stop: a tap whose disc grows from r0 to r1 over the pass; its footprint hardens from hardness0 */
+  tap?: { r0: number; r1: number; hardness0: number };
   /** Extra alpha factor (the full stop's overspray level) */
   alphaScale?: number;
   /** This stroke's channel in stroke-masks.png (paths.json): its core and fog keep their own density */
@@ -112,6 +112,8 @@ export class StrokeEmitter implements Emitter {
   /** Running splat count (fractional): carries the remainder between steps */
   private acc = 0;
   private readonly first: number;
+  /** End of this layer's own steps (exclusive); `last` adds the build-up's echoes after them */
+  private readonly own: number;
   private readonly last: number;
   private rate: number;
   private off = false;
@@ -125,7 +127,8 @@ export class StrokeEmitter implements Emitter {
     const h = look.sim.step;
     // Mist starts before the nozzle and trails after it
     this.first = Math.round((opts.at - (layer.early ?? 0)) / h);
-    this.last = Math.round((opts.at + opts.duration + (layer.trail ?? 0)) / h); // exclusive
+    this.own = Math.round((opts.at + opts.duration + (layer.trail ?? 0)) / h); // exclusive
+    this.last = this.own + (layer.build?.steps ?? 0);
     this.next = this.first;
     this.rate = look.rate * layer.share * opts.share;
   }
@@ -174,9 +177,22 @@ export class StrokeEmitter implements Emitter {
     return 1;
   }
 
+  /** Does step j lay a per-step deposit of its own? */
+  private lays(j: number) {
+    return j >= this.first && j < this.own && this.factor(j) > 0;
+  }
+
+  /** Steps whose deposit lands in step k: k itself, and with a build-up the `steps` before it */
+  private sources(k: number) {
+    const n = this.layer.build?.steps ?? 0;
+    const out: number[] = [];
+    for (let j = k - n; j <= k; j++) if (this.lays(j)) out.push(j);
+    return out;
+  }
+
   /** Splats in step k (deterministic carry: counts sum exactly to rate x time) */
   private count(k: number) {
-    if (this.layer.perStep) return this.factor(k) > 0 ? this.layer.perStep : 0;
+    if (this.layer.perStep) return this.sources(k).length * this.layer.perStep;
     const per = this.rate * look.sim.step * this.factor(k);
     return Math.floor(this.acc + per) - Math.floor(this.acc);
   }
@@ -193,14 +209,25 @@ export class StrokeEmitter implements Emitter {
 
   /** Lays the next step at `into`. Returns splats written. */
   layNext(out: Float32Array, into: number) {
-    const c = this.count(this.next);
-    if (!this.layer.perStep) this.acc += this.rate * look.sim.step * this.factor(this.next);
-    this.step(this.next, c, out, into);
-    this.next++;
+    const k = this.next++;
+    const { perStep, build } = this.layer;
+    if (!perStep) {
+      const c = this.count(k);
+      this.acc += this.rate * look.sim.step * this.factor(k);
+      this.step(k, c, out, into);
+      return c;
+    }
+    // Step j's deposit again (same seed, same splats), weighted: `now` in its own step, the rest in equal echoes
+    let c = 0;
+    for (const j of this.sources(k)) {
+      const weight = !build ? 1 : j === k ? build.now : (1 - build.now) / build.steps;
+      this.step(j, perStep, out, into + c, weight);
+      c += perStep;
+    }
     return c;
   }
 
-  private step(k: number, count: number, out: Float32Array, into: number) {
+  private step(k: number, count: number, out: Float32Array, into: number, weight = 1) {
     const h = look.sim.step;
     const { layer, opts, stroke, p } = this;
     const rand = mulberry32(hash(Number(stroke.id), opts.layerIndex, k));
@@ -209,15 +236,17 @@ export class StrokeEmitter implements Emitter {
     const [r0, r1] = layer.radius;
     const [a0, a1] = layer.aspect;
     // Low tier: fewer splats, each denser, same total paint
-    let alpha = (layer.alpha / opts.share) * (opts.alphaScale ?? 1);
+    let alpha = (layer.alpha / opts.share) * (opts.alphaScale ?? 1) * weight;
     // The tap: everything scales with the growing disc (layers are designed for a stroke's half width)
     let scale = 1;
     let halfWidth = opts.halfWidth;
+    let hardness = layer.hardness;
     if (opts.tap) {
       const p = Math.min(Math.max(((k + 0.5) * h - opts.at) / opts.duration, 0), 1);
       const r = opts.tap.r0 + (opts.tap.r1 - opts.tap.r0) * opts.ease(p);
       scale = r / (look.weight / 2);
       halfWidth = r;
+      if (layer.perStep && layer.clip) hardness = opts.tap.hardness0 + (layer.hardness - opts.tap.hardness0) * p;
     }
     // Per-step deposits carry the ramp in their alpha (rate layers ramp their count)
     if (layer.perStep) alpha *= this.factor(k);
@@ -272,7 +301,7 @@ export class StrokeEmitter implements Emitter {
       out[o + 1] = y;
       out[o + 2] = radius;
       out[o + 3] = kept ? a : 0;
-      out[o + 4] = layer.hardness;
+      out[o + 4] = hardness;
       // Core and fog of a white stroke keep their own density per channel; the rest goes to the paint buffer
       const ch = opts.channel + 1;
       // Core: the mask of the part the nozzle is in (between turns); odd parts' masks are in A
@@ -371,10 +400,7 @@ export class DripEmitter {
     readonly drip: DripData,
     private readonly index: number,
   ) {
-    const d = look.drips.duration;
-    const len = drip.beadY - drip.top;
-    const f = Math.min(Math.max((len - d.minLength) / (d.maxLength - d.minLength), 0), 1);
-    this.duration = d.min + (d.max - d.min) * f;
+    this.duration = dripDuration(drip.beadY - drip.top);
   }
 
   get orange() {
