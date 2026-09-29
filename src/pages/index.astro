@@ -29,7 +29,10 @@ import { person } from '../data/site';
 
 <script>
   import { initStickyNav } from '../scripts/nav';
+  import { matchHeads } from '../scripts/heads';
   const nav = document.querySelector<HTMLElement>('[data-sticky-nav]');
   const hero = document.querySelector<HTMLElement>('[data-hero]');
   if (nav && hero) initStickyNav(nav, hero);
+  const work = document.getElementById('work');
+  if (work) matchHeads(work);
 </script>

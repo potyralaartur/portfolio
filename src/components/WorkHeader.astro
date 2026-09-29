@@ -3,7 +3,7 @@
 import Title from './Title.astro';
 import { workHeader } from '../data/site';
 ---
-<div class="row work-header rule">
+<div class="row work-header rule" data-work-head>
   <p class="cell t-label-m c-secondary label">{workHeader.label}</p>
   <div class="cell main">
     <Title as="h2" size="l" text={workHeader.title} />
@@ -12,6 +12,9 @@ import { workHeader } from '../data/site';
 </div>
 
 <style>
+  /* As tall as the case study intros (scripts/heads.ts sets --head-h) */
+  .work-header { min-height: var(--head-h, auto); }
+
   .main {
     grid-column: 2 / -1;
     padding-bottom: var(--space-64);

@@ -12,7 +12,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const titleId = `${study.slug}-title`;
 ---
 <article class="case rule" id={study.slug} aria-labelledby={titleId}>
-  <div class="row intro">
+  <div class="row intro" data-case-intro>
     <p class="cell t-label-m c-tertiary index">{pad(index)} / {pad(total)}</p>
     <div class="main">
       <div class="title"><Title as="h3" size="m" text={study.title} id={titleId} /></div>
@@ -27,14 +27,18 @@ const titleId = `${study.slug}-title`;
     padding-bottom: var(--space-120);
     display: flex;
     flex-direction: column;
-    gap: var(--space-64);
+    --case-gap: var(--space-64);
+    gap: var(--case-gap);
   }
+
+  /* Top rule to gallery is as tall as the Work header (scripts/heads.ts sets --head-h) */
+  .intro { min-height: calc(var(--head-h, 0px) - var(--case-gap)); }
 
   .main {
     grid-column: 2 / -1;
     display: flex;
     flex-direction: column;
-    gap: var(--space-24);
+    gap: var(--space-8);
   }
   .title { padding: var(--space-16) var(--space-16) 0; }
 
@@ -51,6 +55,6 @@ const titleId = `${study.slug}-title`;
   }
 
   @media (max-width: 767px) {
-    .case { padding-bottom: var(--space-64); gap: var(--space-40); }
+    .case { padding-bottom: var(--space-64); --case-gap: var(--space-40); }
   }
 </style>
