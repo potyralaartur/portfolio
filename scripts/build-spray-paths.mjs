@@ -81,21 +81,21 @@ for (const r of ref.strokes) {
   if (svgD[r.id] !== r.d) throw new Error(`strokes.svg #${r.id} differs from reference/strokes.json`);
 }
 const drips = ref.drips.map((d) => {
-  const timing = schedule.drips[d.id];
-  if (timing === undefined) throw new Error(`no timing for ${d.id} in look.ts schedule.drips`);
-  const landed = paintLands(d, timing.stroke);
-  const start = r3(landed + timing.after);
+  const stroke = schedule.drips[d.id];
+  if (stroke === undefined) throw new Error(`no stroke for ${d.id} in look.ts schedule.drips`);
+  const start = r3(nozzlePasses(d, stroke));
   const end = start + dripDuration(d.beadY - d.top);
   if (end > schedule.end + 1e-6) throw new Error(`${d.id} runs to ${end.toFixed(2)}s, past schedule.end ${schedule.end}s`);
-  return { ...d, landed: r3(landed), start };
+  return { ...d, start };
 });
 
 /**
- * When paint lands on a drip (s): the last moment the nozzle of stroke `id` is
- * at its closest to the drip's top. The tap stays put, so its paint keeps
- * pooling until it ends.
+ * When the nozzle of stroke `id` has moved past a drip (s): half the stroke's
+ * weight beyond its last closest point to the drip's top, so its spray no
+ * longer covers the drip, or the stroke's end if it stops sooner. The tap
+ * stays put, so it goes when the tap ends.
  */
-function paintLands(drip, id) {
+function nozzlePasses(drip, id) {
   const stroke = strokes.find((s) => s.id === id);
   const slot = schedule.strokes.find((s) => s.id === id);
   if (!stroke || !slot) throw new Error(`${drip.id}: no stroke ${id}`);
@@ -110,13 +110,15 @@ function paintLands(drip, id) {
       arc = Math.min(i * look.sampleStep, stroke.length);
     }
   }
-  // The ease is monotonic: bisect for the progress where the nozzle reaches arc
+  const past = arc + ref.strokeWeight / 2;
+  if (past >= stroke.length) return slot.at + duration;
+  // The ease is monotonic: bisect for the progress where the nozzle reaches past
   const ease = strokeEase(stroke, slot.ease, schedule.ease);
   let lo = 0;
   let hi = 1;
   for (let k = 0; k < 40; k++) {
     const mid = (lo + hi) / 2;
-    if (ease(mid) * stroke.length < arc) lo = mid;
+    if (ease(mid) * stroke.length < past) lo = mid;
     else hi = mid;
   }
   return slot.at + hi * duration;
@@ -519,8 +521,8 @@ for (const s of strokes) {
   console.log(`${s.id}  ${s.letter.padEnd(6)}  ${s.name.padEnd(14)}  ${s.length.toFixed(2).padStart(6)}  ${slot.at.toFixed(2)}   ${dur.toFixed(2)}  ${speed}`);
 }
 for (const st of strokes) if (st.turns) console.log(`turns ${st.id}: ${st.turns.map((t) => `s ${t.s} (${t.angle} deg, speed ${t.speed})`).join(', ')}`);
-console.log('drip    paint lands  starts  stops');
+console.log('drip    starts  stops');
 for (const d of drips) {
-  console.log(`${d.id}  ${d.landed.toFixed(2).padStart(11)}  ${d.start.toFixed(2).padStart(6)}  ${(d.start + dripDuration(d.beadY - d.top)).toFixed(2).padStart(5)}`);
+  console.log(`${d.id}  ${d.start.toFixed(2).padStart(6)}  ${(d.start + dripDuration(d.beadY - d.top)).toFixed(2).padStart(5)}`);
 }
 console.log(`points: ${strokes.reduce((n, s) => n + s.points.length / 2, 0)}, mask ${W}x${H} over ${R.w}x${R.h} units`);

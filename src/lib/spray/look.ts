@@ -478,19 +478,19 @@ export const schedule = {
     { id: '08', at: 2.84, duration: 0.12 }, // the full stop tap
   ] as { id: string; at: number; duration?: number; ease?: string }[],
   /**
-   * Fixed drips (notes §6): R has none, T has two. Each lets go `after` s once
-   * paint lands on it: when the nozzle of `stroke` last passes the drip's top,
-   * or, for the tap, when it ends. The more paint pooled there, the sooner it
-   * goes: the T stem's dwell (drip-2) first, the crossbar's fast, light pass
-   * (drip-3) last. The build script turns these into start times (paths.json).
+   * Fixed drips (notes §6): R has none, T has two. Each lets go as soon as the
+   * nozzle of its stroke has moved past it (its spray no longer covers the
+   * drip's top), or, for the tap, when it ends. drip-3 hangs from mid-crossbar,
+   * so it goes while the crossbar is still being sprayed. The build script
+   * turns these into start times (paths.json).
    */
   drips: {
-    'drip-1': { stroke: '01', after: 0.12 }, // P stem's dwell
-    'drip-2': { stroke: '03', after: 0.1 }, // T stem's dwell, the heaviest pool
-    'drip-3': { stroke: '04', after: 0.22 }, // mid-crossbar, starts while the crossbar is still going
-    'drip-4': { stroke: '07', after: 0.18 }, // L foot, the hand barely slows there
-    'drip-5': { stroke: '08', after: 0 }, // the tap is the pool
-  } as Record<string, { stroke: string; after: number }>,
+    'drip-1': '01', // P stem's end
+    'drip-2': '03', // T stem's end
+    'drip-3': '04', // mid-crossbar
+    'drip-4': '07', // L foot
+    'drip-5': '08', // the tap is the pool
+  } as Record<string, string>,
   /** Drips 4 and 5 stop by here: the drawing is finished and stays */
   end: 3.5,
   /** Freeze-frame checks (notes §7): P done, T done, R done, L done, the tap, the end */

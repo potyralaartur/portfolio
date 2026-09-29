@@ -122,16 +122,16 @@ How a drip looks:
 
 How a drip moves:
 
-- It starts once paint has landed on it: 0.10–0.22 s after the nozzle last passes over its top, not after the whole stroke ends (drip-3 hangs from the middle of the crossbar, so it goes while the crossbar is still being sprayed). The more paint pooled there, the sooner it lets go: drip-2 (the T stem's dwell, the heaviest pool) first, drip-3 (the crossbar's fast, light pass) last. drip-5 starts as soon as the tap ends: the tap is the pool.
-- Start times (`look.ts` `schedule.drips` sets the delays; the build script works out when paint lands):
+- It starts right after the nozzle moves past it: once the nozzle is half the stroke weight beyond its last closest point to the drip's top (its spray no longer covers the drip), or at the end of the stroke if that comes first. No extra delay: the swell below is the pooling. drip-3 hangs from the middle of the crossbar, so it goes while the crossbar is still being sprayed. drip-5 starts as soon as the tap ends: the tap is the pool.
+- Start times (`look.ts` `schedule.drips` names each drip's stroke; the build script works out when the nozzle has passed):
 
-  | Drip | Paint lands | Delay | Starts | Stops |
-  | --- | --- | --- | --- | --- |
-  | drip-1 | 0.14 (end of 01) | 0.12 | 0.26 | 0.82 |
-  | drip-2 | 0.99 (end of 03) | 0.10 | 1.09 | 1.98 |
-  | drip-3 | 1.15 (04, mid-crossbar) | 0.22 | 1.37 | 1.87 |
-  | drip-4 | 2.59 (07, along the foot) | 0.18 | 2.77 | 3.40 |
-  | drip-5 | 2.96 (end of the tap) | 0 | 2.96 | 3.46 |
+  | Drip | Nozzle has passed | Starts | Stops |
+  | --- | --- | --- | --- |
+  | drip-1 | end of 01 | 0.15 | 0.71 |
+  | drip-2 | end of 03 | 0.99 | 1.88 |
+  | drip-3 | 04, mid-crossbar | 1.16 | 1.66 |
+  | drip-4 | 07, along the foot | 2.60 | 3.23 |
+  | drip-5 | end of the tap | 2.96 | 3.46 |
 - **Swell** (first ~18 % of its time): the paint pools at the lip. The bead grows out of the letter's edge and the neck forms; nothing runs yet.
 - **Release:** it lets go, runs fast, then creeps slowly to a stop (still at both ends, not an ease-out that starts at full speed). drip-2, the long one, sticks once on the way (stick-slip).
 - Duration scales with length: 0.5 s for drips up to ~10 units, up to 0.9 s for drip-2 (22 units). It stops **exactly** at its bead position, which is where it stays in the finished drawing.
