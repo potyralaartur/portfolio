@@ -92,6 +92,9 @@ button {
  * Figma "Grid / 4 columns": 1px column rules the full page height, behind
  * everything (x = 24, 372, 720, 1068, 1416 at 1440). Content with a fill
  * (images, the gallery track, the hero) covers it.
+ * The gradient tile is 1px tall and repeats down: Chrome rasterises a
+ * page-tall tile at reduced resolution, which blurs the rules and makes them
+ * look dimmer than the same rules drawn on shorter elements (gallery, hero).
  */
 .page-grid {
   position: absolute;
@@ -100,7 +103,7 @@ button {
   pointer-events: none;
   border-right: 1px solid var(--line-grid);
   background: linear-gradient(to right, var(--line-grid) 1px, transparent 1px) 0 0 /
-    calc(100% / var(--grid-columns)) 100% repeat-x;
+    calc(100% / var(--grid-columns)) 1px repeat;
   background-clip: padding-box; /* keep the last tile out from under the border */
 }
 
