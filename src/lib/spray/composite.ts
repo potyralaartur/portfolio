@@ -10,8 +10,11 @@
  * into droplets, round dots drawn procedurally in logo space at the canvas's
  * resolution (notes §5: grainy, not smooth), static (§3), keeping the fog's
  * mean. Drips are drawn here too, as antialiased shapes (DripEmitter.state).
- * Scroll: the paint is dragged up (the way the page moves), thinning where it leaves,
- * then it all fades, fog first; at uScroll 0 the output is untouched.
+ * Smear (look.smear): one displacement D, each pixel shows the paint from
+ * p - D: the scroll's drag up (the way the page moves) plus the cursor's
+ * (smear.ts field). The paint stretches like a thick liquid. The cursor
+ * smear dissolves back to the untouched paint; the scroll's stays until the
+ * logo has scrolled away. At uScroll 0 with no cursor smear the output is untouched.
  * At rest the finished drawing is baked into a texture at the canvas size
  * (bake()); the canvas keeps showing it, and the scroll effect runs on it.
  */
@@ -37,7 +40,6 @@ import type { DripState } from './splats';
 
 const COMPOSITE_FRAG = /* glsl */ `
 precision highp float;
-#define RUN_TAPS ${look.scroll.run.taps}
 uniform sampler2D uPaint;
 uniform sampler2D uCore; // white core, one stroke colour per channel (RGB)
 uniform sampler2D uFog; // white fog (mist, halo), likewise
@@ -46,7 +48,7 @@ uniform sampler2D uBaked; // the finished drawing at canvas size, premultiplied 
 uniform bool uAtRest; // show uBaked instead of the paint buffers
 uniform sampler2D uGrain;
 uniform vec4 uView; // left, top, width, height of the buffer in logo units
-uniform float uGrainCell; // grain cell size, logo units (scroll fade)
+uniform float uGrainCell; // grain cell size, logo units (cursor smear dissolve)
 uniform float uAa; // logo units per device pixel: antialiasing width
 // Overspray droplets (look.overspray): per octave cell, dot radius min / max (x cell), weight
 uniform vec4 uDrop[3];
@@ -65,16 +67,15 @@ uniform float uDripAlpha;
 uniform vec3 uWhite;
 uniform vec3 uOrange;
 uniform float uK;
-// Scroll (look.scroll): uScroll 0..1 and the effect's shape
+// Smear (look.smear): the scroll's drag (uScroll 0..1) and the cursor's (uField)
 uniform float uScroll;
 uniform vec2 uRunRange;
-uniform vec4 uRun; // max, column, coarse, power
-uniform vec4 uSmear; // floor, decay, drag, streak cell
-uniform vec4 uSmearShape; // film lo, film hi, line crispness, line length spread
-uniform vec2 uRunTail; // drag-line depth (0 even .. 1 only on lines), top fade (units)
-uniform vec2 uFadeRange;
-uniform float uFadeGrain;
-uniform vec2 uFadeShape; // streak segment length (units), drag-line weight
+uniform vec2 uEdge; // fade into the untouched paint near the canvas edge: top, sides (units)
+uniform vec4 uLiquid; // cell, max, power, wobble
+uniform vec3 uLiquidShape; // ramp from, ramp to, wobble cell
+uniform sampler2D uField; // cursor smear field (smear.ts): displacement, strength, hold
+uniform bool uFieldOn;
+uniform vec3 uDissolve; // across, along (units), grain share
 in vec2 vUv;
 out vec4 color;
 
@@ -197,75 +198,70 @@ vec4 source(vec2 uv) {
   return vec4(uOrange * o + uWhite * w * (1.0 - o), o + w * (1.0 - o));
 }
 
-float hash(float n) {
-  return fract(sin(n * 127.1 + 311.7) * 43758.5453);
+// Scroll drag, liquid: the paint stretches up, more in a few wide tongues; the
+// stretch rises from the letters' lower part to full above them, gently enough
+// that it never folds
+vec2 liquidScroll(vec2 world) {
+  float n = 0.65 * vnoise1(world.x / uLiquid.x, 61) + 0.35 * vnoise1(world.x / (uLiquid.x * 0.43), 62);
+  float len = uLiquid.y * pow(clamp(n, 0.0, 1.0), uLiquid.z);
+  float r = smoothstep(0.0, 1.0, (uLiquidShape.x - world.y) / (uLiquidShape.x - uLiquidShape.y));
+  return vec2(0.0, -len * r);
 }
 
-// Smooth seeded value noise along x: which columns run, and how far
-float columnNoise(float x) {
-  float a = x / uRun.y;
-  float fa = fract(a);
-  float fine = mix(hash(floor(a)), hash(floor(a) + 1.0), fa * fa * (3.0 - 2.0 * fa));
-  float b = x / uRun.z;
-  float fb = fract(b);
-  float coarse = mix(hash(floor(b) + 71.0), hash(floor(b) + 72.0), fb * fb * (3.0 - 2.0 * fb));
-  return clamp(0.55 * fine + 0.45 * coarse, 0.0, 1.0);
+// Liquid: one warped lookup, swaying sideways a little along the stretch
+vec4 liquid(vec2 world, vec2 d) {
+  float l = length(d);
+  vec2 dir = d / l;
+  float along = dot(world, dir);
+  float sway = (2.0 * vnoise1(along / uLiquidShape.z, 51) - 1.0) * uLiquid.w * min(l / 10.0, 1.0);
+  return source(toUv(world - d + vec2(-dir.y, dir.x) * sway));
+}
+
+// Cursor smear dissolving: as its strength falls, each part goes back to the
+// untouched paint when the strength passes its threshold, in streak segments
+// along the smear, so it breaks up rather than fades. Soft-edged, so a
+// segment flows back over a few frames instead of popping
+float dissolve(vec2 world, vec4 f) {
+  float l = length(f.xy);
+  vec2 dir = l > 1e-3 ? f.xy / l : vec2(0.0, 1.0);
+  vec2 q = vec2(dot(world, vec2(-dir.y, dir.x)), dot(world, dir));
+  float seg = 0.7 * vnoise2(q / uDissolve.xy, 33).x + 0.3 * vnoise2(q / (uDissolve.xy * 0.5), 34).y;
+  float t = 0.1 + 0.8 * mix(seg, grainAt(world), uDissolve.z);
+  return smoothstep(t - 0.12, t + 0.06, f.z);
+}
+
+// 1 inside, 0 at the canvas edge: the smear fades into the untouched paint there
+float edge(vec2 world) {
+  float right = uView.x + uView.z;
+  float bottom = uView.y + uView.w;
+  return smoothstep(uView.y, uView.y + uEdge.x, world.y)
+    * smoothstep(uView.x, uView.x + uEdge.y, world.x)
+    * (1.0 - smoothstep(right - uEdge.y, right, world.x))
+    * (1.0 - smoothstep(bottom - uEdge.y, bottom, world.y));
 }
 
 void main() {
-  // No scroll: untouched
-  if (uScroll <= 0.0) {
+  // No scroll, no cursor smear: untouched
+  if (uScroll <= 0.0 && !uFieldOn) {
     color = source(vUv);
     return;
   }
   vec2 world = toWorld(vUv);
-
-  // The paint is dragged up as the page scrolls down, as if wiped while wet:
-  // each pixel keeps part of its paint and takes on paint pulled up from
-  // below it, more from nearby than far (an exponential trail up to \`len\`).
-  // Where paint is pulled from, the letter thins, so nothing is doubled.
-  // How much moves varies across x in fine drag lines; how far, in wider bands.
-  float runProgress = smoothstep(uRunRange.x, uRunRange.y, uScroll);
-  // Drag lines: fine, uneven streaks across x (bristles, fingertips), crisp-sided
-  float lineNoise = 0.65 * vnoise1(world.x / uSmear.w, 21) + 0.35 * vnoise1(world.x / (uSmear.w * 0.37), 22);
-  float lines = smoothstep(0.5 - uSmearShape.z, 0.5 + uSmearShape.z, lineNoise);
-  // Length: wide bands, and each fine line stops at its own height (ragged ends)
-  float lineLen = 1.0 + uSmearShape.w * (2.0 * vnoise1(world.x / (uSmear.w * 0.8), 23) - 1.0);
-  float len = runProgress * uRun.x * lineLen * (uSmear.x + (1.0 - uSmear.x) * pow(columnNoise(world.x), uRun.w));
   vec4 here = source(vUv);
-  vec4 c = here;
-  if (len > 0.0) {
-    float decay = max(len * uSmear.y, 1e-3);
-    float span = 1.0 - exp(-len / decay);
-    // Taps spread by the trail's own falloff (equal weights), jittered per device pixel (static)
-    float jitter = hash4(ivec2(floor(world / uAa)), 7, 0).x;
-    vec4 trail = vec4(0.0);
-    for (int i = 0; i < RUN_TAPS; i++) {
-      float u = (float(i) + jitter) / float(RUN_TAPS);
-      trail += source(toUv(world + vec2(0.0, -decay * log(1.0 - u * span))));
-    }
-    trail /= float(RUN_TAPS);
-    // Wet film: a dragged trail stays fairly solid, then breaks off, instead of blurring out
-    float film = smoothstep(uSmearShape.x, uSmearShape.y, trail.a);
-    trail *= film / max(trail.a, 1e-4);
-    float drag = runProgress * uSmear.z * (1.0 - uRunTail.x + uRunTail.x * lines);
-    c = here * (1.0 - drag) + trail * drag;
+
+  // The drag: the scroll's, grown with it, plus the cursor's where it hasn't dissolved
+  float runProgress = smoothstep(uRunRange.x, uRunRange.y, uScroll);
+  vec2 d = vec2(0.0);
+  if (runProgress > 0.0) d = runProgress * liquidScroll(world);
+  if (uFieldOn) {
+    vec4 f = texture(uField, vUv);
+    // Whole while it holds (its displacement eases out at the brush's rim by itself), then dissolving
+    if (f.z > 0.0) d += f.xy * (f.w > 0.0 ? 1.0 : dissolve(world, f));
   }
+  vec4 c = here;
+  if (length(d) > 1e-3) c = liquid(world, d);
+  c = mix(here, c, edge(world));
 
-  // Wiped off: each pixel goes when the fade passes its threshold. Paint
-  // breaks up into short streak segments along the drag (noise stretched
-  // along y), sooner between the drag lines, thin paint before dense; a fine
-  // dither keeps the front from being a hard contour
-  float f = clamp((uScroll - uFadeRange.x) / (uFadeRange.y - uFadeRange.x), 0.0, 1.0) * 1.1;
-  vec2 sn = vnoise2(world / vec2(uSmear.w * 0.7, uFadeShape.x), 31);
-  float segments = 0.6 * sn.x + 0.4 * vnoise2(world / vec2(uSmear.w * 1.6, uFadeShape.x * 0.45), 32).y;
-  float pattern = mix(segments, lines, uFadeShape.y);
-  float threshold = uFadeGrain * grainAt(world) + (1.0 - uFadeGrain) * (0.5 * pattern + 0.5 * c.a);
-  c *= 1.0 - smoothstep(threshold - 0.2, threshold + 0.05, f);
-
-  // Smears fade out near the canvas top instead of stopping at its edge
-  // (eased in with the smear, so the first scroll pixel changes nothing)
-  c *= mix(1.0, smoothstep(uView.y, uView.y + uRunTail.y, world.y), runProgress);
   color = c;
 }`;
 
@@ -278,6 +274,8 @@ export interface PaintTextures {
 export interface Composite {
   /** 0 at rest (the source untouched) .. 1 gone */
   setScroll(value: number): void;
+  /** The cursor smear field (smear.ts), or null: none */
+  setField(field: Texture | null): void;
   /** The drips, up to 5 (null = not started) */
   setDrips(list: (DripState | null)[]): void;
   /** The finished drawing into a texture at the canvas size; render(null) shows it from then on */
@@ -289,7 +287,9 @@ export interface Composite {
 
 export function createComposite(engine: Engine, grainTex: Texture): Composite {
   const c = look.composite;
-  const sc = look.scroll;
+  const sm = look.smear;
+  const lq = sm.liquid;
+  const cu = sm.cursor;
   const dr = look.drips;
   const ov = look.overspray;
   const drips = Array.from({ length: 5 }, () => new Vector4());
@@ -329,14 +329,13 @@ export function createComposite(engine: Engine, grainTex: Texture): Composite {
       uOrange: { value: c.orange },
       uK: { value: c.k },
       uScroll: { value: 0 },
-      uRunRange: { value: sc.run.range },
-      uRun: { value: [sc.run.max, sc.run.column, sc.run.coarse, sc.run.power] },
-      uSmear: { value: [sc.run.floor, sc.run.decay, sc.run.drag, sc.run.lines] },
-      uSmearShape: { value: [sc.run.film[0], sc.run.film[1], sc.run.crisp, sc.run.lineLength] },
-      uRunTail: { value: [sc.run.depth, sc.run.topFade] },
-      uFadeRange: { value: sc.fade.range },
-      uFadeGrain: { value: sc.fade.grain },
-      uFadeShape: { value: [sc.fade.segment, sc.fade.lines] },
+      uRunRange: { value: sm.scroll.range },
+      uEdge: { value: [sm.edge.top, sm.edge.sides] },
+      uLiquid: { value: [lq.cell, lq.max, lq.power, lq.wobble.amount] },
+      uLiquidShape: { value: [lq.ramp.from, lq.ramp.to, lq.wobble.cell] },
+      uField: { value: blank },
+      uFieldOn: { value: false },
+      uDissolve: { value: [cu.dissolve.across, cu.dissolve.along, cu.dissolve.grain] },
     },
     blending: NoBlending,
     depthTest: false,
@@ -365,6 +364,10 @@ export function createComposite(engine: Engine, grainTex: Texture): Composite {
     setScroll(value) {
       mat.uniforms.uScroll.value = value;
     },
+    setField(field) {
+      mat.uniforms.uFieldOn.value = !!field;
+      mat.uniforms.uField.value = field ?? blank;
+    },
     setDrips(list) {
       for (let i = 0; i < 5; i++) {
         const d = list[i];
@@ -388,7 +391,9 @@ export function createComposite(engine: Engine, grainTex: Texture): Composite {
         });
       }
       const scroll = mat.uniforms.uScroll.value;
+      const fieldOn = mat.uniforms.uFieldOn.value;
       mat.uniforms.uScroll.value = 0;
+      mat.uniforms.uFieldOn.value = false;
       // Never sample the target being drawn: a bound uBaked is a feedback loop and WebGL drops the draw
       mat.uniforms.uBaked.value = blank;
       use(paint);
@@ -396,6 +401,7 @@ export function createComposite(engine: Engine, grainTex: Texture): Composite {
       engine.renderer.render(scene, engine.camera);
       engine.renderer.setRenderTarget(null);
       mat.uniforms.uScroll.value = scroll;
+      mat.uniforms.uFieldOn.value = fieldOn;
       mat.uniforms.uBaked.value = baked.texture;
     },
     render(paint) {

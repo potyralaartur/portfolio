@@ -6,13 +6,15 @@
  * grain, the mask and the emitters is disposed. On scroll the baked drawing
  * runs and fades. A resize at rest lays the drawing again at the new size
  * (every play lays identical paint). The SVG shows only if the canvas fails.
+ * At rest a fine pointer smears the paint (smear.ts); it dissolves after a delay.
  */
 import { createComposite } from './composite';
 import { strokeEase } from './ease';
 import { createEngine, type EngineOptions } from './engine';
-import { look, schedule, strokeDuration, type LayerLook } from './look';
+import { look, schedule, strokeDuration, VIEW, type LayerLook } from './look';
 import { createPaint, loadTexture, type Paint } from './paint';
 import paths from './paths.json';
+import { createSmear } from './smear';
 import { DripEmitter, emitAll, StrokeEmitter, type DripData, type Emitter, type StrokeData } from './splats';
 import { createIntroTimeline, createScroll } from './timeline';
 import masksUrl from './stroke-masks.png?url';
@@ -147,6 +149,29 @@ export async function startSpray(opts: EngineOptions) {
     relayTimer = window.setTimeout(relayAtRest, look.rest.relayDelay * 1000);
   });
 
+  /**
+   * Cursor smear: fine pointers only (on touch a drag is a scroll), once the
+   * drawing is at rest. Pointer moves go to the smear field in logo units;
+   * frames keep coming while anything is still smeared.
+   */
+  const smear = matchMedia('(hover: hover) and (pointer: fine)').matches ? createSmear(engine) : null;
+  let pointer: { x: number; y: number } | null = null;
+  const toLogo = (e: PointerEvent) => {
+    const r = opts.canvas.getBoundingClientRect();
+    return {
+      x: VIEW.left + ((e.clientX - r.left) / r.width) * (VIEW.right - VIEW.left),
+      y: VIEW.top + ((e.clientY - r.top) / r.height) * (VIEW.bottom - VIEW.top),
+    };
+  };
+  const onPointerMove = (e: PointerEvent) => {
+    if (!smear || !disposed || e.pointerType === 'touch') return;
+    const p = toLogo(e);
+    if (pointer) smear.move(pointer, p);
+    pointer = p;
+    engine.requestRender();
+  };
+  const onPointerLeave = () => (pointer = null);
+
   // Scroll: render only when uScroll changes, and not while the hero is off screen
   const hero = opts.wrap.closest<HTMLElement>('[data-hero]') ?? opts.wrap;
   let heroVisible = true;
@@ -220,10 +245,13 @@ export async function startSpray(opts: EngineOptions) {
     disposed = true;
     paint.dispose();
     intro.dispose();
-    // At rest: the baked drawing, with the scroll effect
-    engine.setFrame(() => {
+    // At rest: the baked drawing, with the scroll and cursor smears
+    engine.setFrame((dt) => {
+      smear?.update(dt);
+      composite.setField(smear?.active ? smear.texture : null);
       composite.setScroll(scroll.value);
       composite.render(null);
+      if (smear?.active) engine.requestRender();
     });
   }
 
@@ -265,8 +293,16 @@ export async function startSpray(opts: EngineOptions) {
     if (intro.tl.isActive() || emitters.some((e) => e.waiting(t))) engine.requestRender();
   });
 
+  if (smear) {
+    hero.addEventListener('pointermove', onPointerMove);
+    hero.addEventListener('pointerleave', onPointerLeave);
+  }
+
   teardown = () => {
     clearTimeout(relayTimer);
+    hero.removeEventListener('pointermove', onPointerMove);
+    hero.removeEventListener('pointerleave', onPointerLeave);
+    smear?.dispose();
     intro.dispose();
     scroll.dispose();
   };

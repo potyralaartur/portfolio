@@ -279,8 +279,8 @@ export const look = {
   },
   /**
    * Grain: a static blue-noise tile in logo space (no per-frame noise, notes
-   * §3). Only the scroll fade uses it now, as a dither: which pixels go first.
-   * One texel per device pixel, so the fade thins out finely, with no blocks.
+   * §3). Only the cursor smear's dissolve uses it now, as a fine dither.
+   * One texel per device pixel, so it thins out finely, with no blocks.
    */
   grain: {
     tile: 64,
@@ -365,35 +365,40 @@ export const look = {
     scrub: 0.4,
     /** Scrolling during the intro plays the rest of it in this many seconds */
     fastForward: 0.4,
-    /**
-     * 0 - 0.6: the wet paint is dragged up, the way the letters move as the
-     * page scrolls down (composite.ts). Each pixel keeps part of its paint and
-     * takes on paint pulled up from below, more from nearby than far; where
-     * paint leaves, the letter thins. Units are logo units.
-     */
-    run: {
-      range: [0, 0.6] as [number, number],
-      max: 22, // longest drag; the canvas ends ~28 units above the crossbar
-      floor: 0.25, // every column drags at least this share of max
-      column: 2.6, // bands of drag length across x (a hand, fingers)
-      coarse: 9, // a second, coarser octave
-      power: 1.6, // most bands drag a moderate way, a few long
-      decay: 0.45, // trail falloff length, x the drag length: dense near the paint, thin far
-      drag: 0.85, // share of the paint that moves at full drag, on the strongest lines
-      lines: 0.5, // drag-line cell across x (bristles, fingertips)
-      crisp: 0.1, // drag-line sides: smaller is sharper
-      depth: 0.7, // how much the drag lines decide what moves (0: evenly, 1: only on lines)
-      lineLength: 0.35, // each fine line's drag length varies +- this share: ragged ends
-      film: [0.04, 0.4] as [number, number], // trail alpha -> film: solid, then breaks off
-      taps: 16, // samples along the trail
-      topFade: 6, // units below the canvas top where trails fade out
+  },
+
+  /**
+   * Smear (composite.ts): the wet paint dragged, by the scroll (up, the way
+   * the letters move as the page scrolls down) and by the cursor (smear.ts).
+   * One displacement D: each pixel shows the paint from p - D; the paint
+   * stretches like a thick liquid, no streaks. Units: logo units.
+   */
+  smear: {
+    /** uScroll range over which the scroll drag grows to full */
+    scroll: { range: [0, 0.6] as [number, number] },
+    /** The smear fades into the untouched paint this close to the canvas edge: top (room for scroll trails), the other sides */
+    edge: { top: 6, sides: 4 },
+    liquid: {
+      /** Scroll: stretch length across x, noise cell (units); power > 1: a few long tongues */
+      cell: 22,
+      max: 60,
+      power: 1.4,
+      /** The stretch rises from 0 at y = from to full at y = to (up); keep (from - to) > 1.5 x max so it never folds */
+      ramp: { from: 130, to: -12 },
+      /** Viscous wobble sideways, units at full stretch, over this length (units) */
+      wobble: { amount: 0.8, cell: 9 },
     },
-    /** 0.35 - 0.95: wiped off in the drag lines' pattern: between the lines first, dense paint last */
-    fade: {
-      range: [0.35, 0.95] as [number, number],
-      grain: 0.2, // fine dither share of the threshold
-      segment: 5, // streak segments the paint breaks into, units long (narrow across, like the drag lines)
-      lines: 0.3, // how much the drag lines decide what goes first (the rest: segments)
+    /** Pointer smear: fine pointers only (hover), once the drawing is at rest */
+    cursor: {
+      field: 320, // field width, texels (over the whole canvas)
+      radius: 7, // brush radius, units (~ the stroke weight)
+      pull: 1, // share of the pointer's motion the paint follows
+      maxLen: 28, // longest smear, units
+      maxStep: 0.35, // a move is laid in steps of at most this x the radius: the carried paint never folds
+      hold: 1.2, // s after the last touch before it dissolves
+      fade: 0.8, // s to dissolve
+      /** Dissolve pattern: streak segments across (units) and along the smear (units), fine grain share */
+      dissolve: { across: 2.5, along: 7, grain: 0.08 },
     },
   },
 

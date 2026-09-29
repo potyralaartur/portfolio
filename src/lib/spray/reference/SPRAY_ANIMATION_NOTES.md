@@ -168,7 +168,7 @@ Full schedule (seconds). It replaces the timing table in the implementation prom
 
 Drip start times are in section 6.
 
-There is no handoff to the SVG: once the drawing is finished the canvas keeps it (and the scroll effect runs on it). On scroll the wet paint is **dragged upward**, the way the letters move as the page scrolls down, as if wiped by a hand. Paint moves rather than being copied: each spot keeps part of its paint and takes on paint pulled up from below, dense near the letter and thinning with distance. Letters thin where paint leaves them, fine drag lines (bristles, fingertips) streak the trails, and each line stops at its own height, so the ends are ragged. Then it's wiped off: the paint breaks up into short streak segments along the drag, between the lines first and the densest paint last, until nothing is left. The SVG tag shows only when the spray can't run: reduced motion, no WebGL2, Save-Data, a major performance caveat, or a lost WebGL context.
+There is no handoff to the SVG: once the drawing is finished the canvas keeps it (and the smear runs on it). On scroll the wet paint is **dragged upward**, the way the letters move as the page scrolls down. On desktop the **cursor smears it too**: paint follows the pointer along its path, holds for a moment (1.2 s), then dissolves in streak segments back to the clean letters. Both smears are **liquid**: the paint stretches smoothly like a thick liquid, in a few wide tongues, with no streaks. The scroll's stretch stays as the logo scrolls away with the page; nothing fades. The SVG tag shows only when the spray can't run: reduced motion, no WebGL2, Save-Data, a major performance caveat, or a lost WebGL context.
 
 ---
 
