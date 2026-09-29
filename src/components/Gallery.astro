@@ -1,10 +1,10 @@
 ---
 /**
  * Figma "Gallery (full-bleed filmstrip, n images)" (31:421) + "Controls" (31:465).
- * Slides span 1-3 grid columns and sit flush. Each slide draws its own column
- * rules, so at rest they land exactly on the page grid and the 1px gap at a
- * slide's left edge reads as the column rule. The strip starts on the column 1
- * rule and bleeds past the right margin to the viewport edge.
+ * Slides span 1-3 grid columns and sit flush. The track draws the column rules
+ * as its own background, which stays put while the slides scroll over it; at
+ * rest the 1px gap at a slide's left edge lands on a rule. The strip starts on
+ * the column 1 rule and bleeds past the right margin to the viewport edge.
  *
  * Native horizontal scroller: trackpad, touch, keys and screen readers work
  * without JS. scripts/gallery.ts adds mouse drag, arrows, the visible-range
@@ -92,16 +92,26 @@ const n = slides.length;
     scroll-snap-type: x proximity;
     scrollbar-width: none;
     cursor: grab;
-    /* Opaque: slides draw their own rules, so the page grid must not show through */
-    background: var(--bg-base);
+    /*
+     * Column rules over an opaque base (the page grid must not show through).
+     * A scroll container's own background doesn't scroll with its content, so
+     * the rules stay fixed on the grid while the slides move over them. The
+     * last tile's rule is the right margin rule (4 x col).
+     */
+    background:
+      linear-gradient(to right, var(--line-grid) 1px, transparent 1px) 0 0 / var(--col) 1px repeat,
+      var(--bg-base);
   }
   .track::-webkit-scrollbar { display: none; }
   .track:focus-visible { outline-offset: -2px; }
 
-  /* While dragging, snapping and smooth scrolling are off (set by gallery.ts) */
-  .track:global(.is-dragging) {
+  /* While dragging or gliding, snapping and smooth scrolling are off (set by gallery.ts) */
+  .track:global(.is-dragging),
+  .track:global(.is-gliding) {
     scroll-snap-type: none;
     scroll-behavior: auto;
+  }
+  .track:global(.is-dragging) {
     cursor: grabbing;
     user-select: none;
   }
@@ -110,16 +120,18 @@ const n = slides.length;
     flex: none;
     width: calc(var(--span) * var(--col));
     scroll-snap-align: start;
-    /* A 1px rule at every column edge the slide covers; the image hides the inner ones */
-    background: linear-gradient(to right, var(--line-grid) 1px, transparent 1px) 0 0 / var(--col) 100% repeat-x;
   }
-  /* Closing rule after the last slide */
-  .slide:last-child { box-shadow: 1px 0 0 var(--line-grid); }
 
   .frame {
     height: var(--film-h);
-    margin-left: 1px; /* the gap that shows the column rule */
+    margin-left: 1px;
     background: var(--bg-raised);
+    /*
+     * A rule in the 1px gap that travels with the image. The opaque base under
+     * it hides the fixed track rule, so where they meet at rest it stays one
+     * hairline instead of two overlapping at double strength.
+     */
+    box-shadow: -1px 0 0 var(--line-grid), -1px 0 0 var(--bg-base);
     display: grid;
     place-items: center;
     overflow: hidden;
