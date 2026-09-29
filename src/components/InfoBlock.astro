@@ -11,7 +11,9 @@ const { label, lines, class: className } = Astro.props;
       <>
         {line.href ? (
           <a href={line.href} {...(line.external ? { target: '_blank', rel: 'noopener' } : {})}>
-            {line.text}{line.external && <span aria-hidden="true"> ↗</span>}
+            {line.text}{line.external && (
+              <svg class="ext" viewBox="0 0 10 10" aria-hidden="true"><path d="M.5 9.5 9 1M2.5 1H9v6.5" /></svg>
+            )}
             {line.external && <span class="visually-hidden"> (opens in a new tab)</span>}
           </a>
         ) : (
@@ -29,4 +31,22 @@ const { label, lines, class: className } = Astro.props;
     flex-direction: column;
     gap: var(--space-8);
   }
+
+  /*
+   * External link arrow: an inline SVG, so its bottom sits on the text baseline
+   * (the ↗ glyph floats above it). Stroke close to the body text's weight.
+   */
+  .ext {
+    display: inline-block; /* the global reset makes svg block */
+    width: 0.6em;
+    height: 0.6em;
+    margin-left: 0.3em;
+    overflow: visible;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.4;
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  a:hover .ext,
+  a:focus-visible .ext { transform: translate(0.15em, -0.15em); }
 </style>
