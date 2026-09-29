@@ -1,0 +1,35 @@
+---
+import Base from '../layouts/Base.astro';
+import Hero from '../components/Hero.astro';
+import WorkHeader from '../components/WorkHeader.astro';
+import CaseStudy from '../components/CaseStudy.astro';
+import About from '../components/About.astro';
+import Contact from '../components/Contact.astro';
+import StickyNav from '../components/StickyNav.astro';
+import { work } from '../data/work';
+import { person } from '../data/site';
+---
+<Base
+  spray
+  title={`${person.name}, ${person.role}`}
+  description="Portfolio of Artur Potyrała, senior product designer in Kraków. Selected product work across fintech, web3, e-commerce, social media and submarine search and rescue."
+>
+  <div class="page-grid" aria-hidden="true"></div>
+  <Hero />
+  <StickyNav />
+  <main>
+    <section id="work" aria-label="Selected work">
+      <WorkHeader />
+      {work.map((study, i) => <CaseStudy study={study} index={i + 1} total={work.length} />)}
+    </section>
+    <About />
+  </main>
+  <Contact />
+</Base>
+
+<script>
+  import { initStickyNav } from '../scripts/nav';
+  const nav = document.querySelector<HTMLElement>('[data-sticky-nav]');
+  const hero = document.querySelector<HTMLElement>('[data-hero]');
+  if (nav && hero) initStickyNav(nav, hero);
+</script>

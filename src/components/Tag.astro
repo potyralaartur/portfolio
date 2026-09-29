@@ -1,0 +1,119 @@
+---
+/**
+ * Hero tag, Figma "Tag / Sprayed (end frame of spray-in animation)" (24:121).
+ * Stage 1392 x 720. The logo outline is drawn three times (halo, mist, core)
+ * at 1280 wide, offset 56 / 136, like the three Figma instances.
+ *
+ * Figma's Noise / Texture effects do not export, so they are rebuilt as SVG
+ * filters here. SVG stdDeviation ~ Figma blur radius / 2.
+ *
+ * The complete end frame is in the HTML: it is the LCP-safe first paint, the
+ * fallback (reduced motion, no WebGL2, Save-Data, errors) and the end frame
+ * the WebGL spray intro (src/lib/spray, canvas below) hands off to.
+ */
+import { LETTERS_D, STOP_D } from '../data/logo';
+const S = 1280 / 240; // 5.3333, logo component -> stage scale
+const place = `translate(56 136) scale(${S})`;
+---
+<div class="tag" data-tag-wrap>
+<svg class="tag-svg" data-tag viewBox="0 0 1392 720" role="img" aria-label="PTRL.">
+  <defs>
+    <path id="tag-letters" fill-rule="evenodd" clip-rule="evenodd" d={LETTERS_D} />
+    <path id="tag-stop" d={STOP_D} />
+
+    <!-- Overspray / Halo: 22%, blur 36, mono noise 1 / 75% -->
+    <filter id="f-halo" x="-10%" y="-25%" width="120%" height="150%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="blur" />
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="4" result="noise" />
+      <feColorMatrix in="noise" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1.6 0 0 0 -0.25" result="grain" />
+      <feComposite in="blur" in2="grain" operator="in" />
+    </filter>
+
+    <!-- Overspray / Mist: 35%, blur 10, mono noise 1.5 / 60% -->
+    <filter id="f-mist" x="-5%" y="-10%" width="110%" height="120%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur" />
+      <feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="2" seed="9" result="noise" />
+      <feColorMatrix in="noise" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1.8 0 0 0 -0.4" result="grain" />
+      <feComposite in="blur" in2="grain" operator="in" />
+    </filter>
+
+    <!-- Paint / Core: texture 3 (rough spray edge) -->
+    <filter id="f-core" x="-2%" y="-2%" width="104%" height="104%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.999" numOctaves="3" seed="0" result="noise" />
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="3" xChannelSelector="R" yChannelSelector="G" />
+    </filter>
+
+    <!-- Drips: texture 2, Figma's own export filter -->
+    <filter id="f-drips" x="-2" y="-2" width="1396" height="724" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.999" numOctaves="3" seed="0" result="noise" />
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="4" xChannelSelector="R" yChannelSelector="G" />
+    </filter>
+
+  </defs>
+
+  <!-- Letters: halo, mist, core -->
+  <g data-layer="letters" fill="var(--text-primary)">
+    <g filter="url(#f-halo)" opacity="0.22"><use href="#tag-letters" transform={place} /></g>
+    <g filter="url(#f-mist)" opacity="0.35"><use href="#tag-letters" transform={place} /></g>
+    <g filter="url(#f-core)"><use href="#tag-letters" transform={place} /></g>
+  </g>
+
+  <!-- Drips (paint). Rects grow down from the letter, beads land last. -->
+  <g data-layer="drips" filter="url(#f-drips)" fill="var(--text-primary)">
+    <g data-drip><rect x="109.5" y="548" width="7" height="64" rx="3.5" /><ellipse data-bead cx="113" cy="610.6" rx="5.6" ry="6.44" /></g>
+    <g data-drip><rect x="441" y="545" width="8" height="118" rx="4" /><ellipse data-bead cx="445" cy="661.4" rx="6.4" ry="7.36" /></g>
+    <g data-drip><rect x="723" y="196" width="6" height="34" rx="3" /><ellipse data-bead cx="726" cy="228.8" rx="4.8" ry="5.52" /></g>
+    <g data-drip><rect x="1097.5" y="540" width="7" height="76" rx="3.5" /><ellipse data-bead cx="1101" cy="614.6" rx="5.6" ry="6.44" /></g>
+  </g>
+
+  <!-- Full stop: tapped last, always signal orange -->
+  <g data-layer="stop" fill="var(--accent-signal)">
+    <g filter="url(#f-halo)" opacity="0.22"><use href="#tag-stop" transform={place} /></g>
+    <g filter="url(#f-mist)" opacity="0.35"><use href="#tag-stop" transform={place} /></g>
+    <g filter="url(#f-core)"><use href="#tag-stop" transform={place} /></g>
+  </g>
+  <g data-layer="stop-drip" filter="url(#f-drips)" fill="var(--accent-signal)">
+    <g data-drip><rect x="1295" y="552" width="6" height="52" rx="3" /><ellipse data-bead cx="1298" cy="602.8" rx="4.8" ry="5.52" /></g>
+  </g>
+</svg>
+<canvas class="tag-canvas" aria-hidden="true" data-spray-canvas></canvas>
+</div>
+
+<script>
+  import { boot } from '../lib/spray/boot';
+  const canvas = document.querySelector<HTMLCanvasElement>('[data-spray-canvas]');
+  const wrap = document.querySelector<HTMLElement>('[data-tag-wrap]');
+  if (canvas && wrap) boot(canvas, wrap);
+</script>
+
+<style>
+  /* Wrapper carries the sizing (Hero.astro targets .tag); SVG fills it. */
+  .tag {
+    position: relative;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1392 / 720;
+    overflow: visible;
+  }
+  .tag-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+  /* WebGL spray: paints over the SVG. The SVG stays the end frame and fallback. */
+  .tag-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+  :global(html.spray) .tag-svg {
+    opacity: 0;
+  }
+  /* Hidden, not removed: at rest the canvas keeps its last frame, ready for the first scroll pixel */
+  :global(html:not(.spray)) .tag-canvas {
+    visibility: hidden;
+  }
+</style>

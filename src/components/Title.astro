@@ -1,0 +1,8 @@
+---
+/** Display title with the signal-orange full stop. Content never includes the period. */
+interface Props { as?: 'h1' | 'h2' | 'h3' | 'p'; size: 'xl' | 'l' | 'm'; text: string; id?: string }
+const { as: Tag = 'h2', size, text, id } = Astro.props;
+---
+<Tag id={id} class:list={[`t-display-${size}`, 'c-primary']}>
+  {text}<span class="stop" aria-hidden="true">.</span>
+</Tag>

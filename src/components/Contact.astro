@@ -1,0 +1,47 @@
+---
+/** Figma "Contact" (31:401): sign-off, details + small logo, colophon. */
+import InfoBlock from './InfoBlock.astro';
+import Title from './Title.astro';
+import Logo from './Logo.astro';
+import { contact } from '../data/site';
+---
+<footer class="contact" id="contact" aria-labelledby="contact-title">
+  <div class="signoff rule">
+    <p class="t-label-m c-secondary">{contact.label}</p>
+    <Title as="h2" size="xl" text={contact.title} id="contact-title" />
+  </div>
+
+  <div class="row details rule">
+    {contact.details.map((d) => <InfoBlock {...d} />)}
+    <div class="cell logo"><Logo width={180} /></div>
+  </div>
+
+  <div class="row colophon rule t-label-m c-tertiary">
+    {contact.colophon.map((line) => <p class="cell">{line}</p>)}
+    <p class="cell top"><a href="#">Back to top <span class="t-body-m arrow" aria-hidden="true">↑</span></a></p>
+  </div>
+</footer>
+
+<style>
+  .signoff {
+    padding: var(--space-16) calc(var(--grid-margin) + var(--grid-inset)) var(--space-40);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-40);
+  }
+
+  .logo { display: flex; justify-content: flex-end; }
+
+  .colophon .cell { padding-bottom: var(--space-24); }
+
+  .top { justify-self: end; }
+  .top a { display: inline-flex; align-items: center; gap: 6px; }
+  .top a:hover { color: var(--text-primary); }
+  .arrow { display: inline-block; transition: transform var(--dur-fast) var(--ease-out); }
+  .top a:hover .arrow { transform: translateY(-2px); }
+
+  @media (max-width: 1023px) {
+    .logo { justify-content: flex-start; }
+    .top { justify-self: start; }
+  }
+</style>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PTRL. spray centerlines, Figma "Logo / PTRL. / Strokes". Logo units 240 x 84,
+  drawing order, open paths, round caps. Source for scripts/build-spray-paths.mjs,
+  kept equal to reference/strokes.json (the build checks it). The R's bowl and
+  leg are one stroke, and so is the L.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 84" fill="none" stroke="#F2F1EE" stroke-width="11.75" stroke-linecap="round" stroke-linejoin="round">
+  <path id="01" data-letter="P" data-name="Stem" d="M 43.386 15.902 C 32.847 34.620 20.620 56.438 11.049 78.073" />
+  <path id="02" data-letter="P" data-name="Top &amp; Bowl" d="M 6.033 19.432 C 47.097 10.742 61.121 11.833 89.945 11.879 C 95.480 11.887 96.682 14.994 96.332 16.990 C 95.646 20.905 90.102 21.752 84.058 25.306 C 67.376 35.115 34.334 44.191 12.864 51.578" />
+  <path id="03" data-letter="T" data-name="Stem" d="M 110.204 11.167 C 97.212 32.462 83.742 54.401 73.021 76.167" />
+  <path id="04" data-letter="T" data-name="Crossbar" d="M 48.000 12.603 C 103.398 6.933 162.829 2.927 212.147 9.458" />
+  <path id="05" data-letter="R" data-name="Stem" d="M 133.307 26.322 C 121.674 42.686 112.828 60.421 102.070 77.261" />
+  <path id="06" data-letter="R" data-name="Bowl &amp; Leg" d="M 113.167 33.270 C 124.216 30.460 139.479 26.654 154.121 27.528 C 162.669 28.039 173.415 28.860 171.214 32.308 C 164.488 42.845 133.946 51.243 121.295 55.734 C 113.226 58.598 106.663 57.639 106.835 59.935 C 106.996 62.097 113.017 59.581 164.116 67.524" />
+  <path id="07" data-letter="L" data-name="Stem &amp; Foot" d="M 197.526 27.167 C 187.540 42.373 178.804 56.757 169.611 70.962 C 168.860 72.123 164.485 75.652 167.616 76.795 C 170.337 77.788 195.900 65.742 214.167 70.150" />
+  <path id="08" data-letter="." data-name="Full stop" stroke="#FF4B1F" stroke-width="14" d="M 232.870 72.680 L 232.970 72.680" />
+</svg>

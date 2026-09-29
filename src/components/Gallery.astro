@@ -1,0 +1,231 @@
+---
+/**
+ * Figma "Gallery (full-bleed filmstrip, n images)" (31:421) + "Controls" (31:465).
+ * Slides span 1-3 grid columns and sit flush. Each slide draws its own column
+ * rules, so at rest they land exactly on the page grid and the 1px gap at a
+ * slide's left edge reads as the column rule. The strip starts on the column 1
+ * rule and bleeds past the right margin to the viewport edge.
+ *
+ * Native horizontal scroller: trackpad, touch, keys and screen readers work
+ * without JS. scripts/gallery.ts adds mouse drag, arrows, the visible-range
+ * counter ("01–02 / 06") and the progress thumb (visible share of the strip).
+ */
+import type { Slide } from '../data/work';
+interface Props { slides: Slide[]; labelledBy: string; eager?: boolean }
+const { slides, labelledBy, eager = false } = Astro.props;
+
+const pad = (n: number) => String(n).padStart(2, '0');
+// Image size at 1440: n columns of 348, minus the 1px rule gap, 600 tall
+const imgW = (cols: number) => cols * 348 - 1;
+const trackId = `${labelledBy}-track`;
+const n = slides.length;
+---
+<section class="gallery" data-gallery aria-labelledby={labelledBy} aria-roledescription="gallery">
+  <ul class="track" id={trackId} data-track tabindex="0" aria-label="Images, scroll horizontally">
+    {slides.map((slide, i) => (
+      <li class="slide" data-slide style={`--span: ${slide.cols}`}>
+        <figure>
+          <div class="frame">
+            {slide.src ? (
+              <img
+                src={slide.src}
+                alt={slide.alt ?? ''}
+                width={imgW(slide.cols)}
+                height={600}
+                loading={eager && i < 2 ? 'eager' : 'lazy'}
+                decoding="async"
+                draggable="false"
+              />
+            ) : (
+              <span class="t-label-m c-tertiary" aria-hidden="true">Image {slide.cols} col · {imgW(slide.cols)} × 600</span>
+            )}
+          </div>
+          <figcaption class="caption">
+            <span class="t-label-m c-tertiary">{pad(i + 1)}</span>
+            <span class="t-body-m c-secondary text">{slide.caption}</span>
+          </figcaption>
+        </figure>
+      </li>
+    ))}
+  </ul>
+
+  {n > 1 && (
+    <div class="controls" data-controls>
+      <p class="t-label-m c-tertiary hint"><span class="hint-fine">Drag or scroll</span><span class="hint-coarse">Swipe</span></p>
+      <div class="progress-cell" aria-hidden="true">
+        <div class="progress"><div class="thumb" data-thumb></div></div>
+      </div>
+      <div class="nav">
+        <p class="t-label-m c-secondary counter" aria-live="polite">
+          <span data-current>01</span> / {pad(n)}
+        </p>
+        <div class="arrows t-heading-s">
+          <button type="button" data-prev aria-controls={trackId} aria-label="Previous images" disabled>←</button>
+          <button type="button" data-next aria-controls={trackId} aria-label="Next images">→</button>
+        </div>
+      </div>
+    </div>
+  )}
+</section>
+
+<style>
+  /*
+   * The gallery runs from the column 1 rule to the viewport edge. Its width is
+   * the container for the column unit: (gallery width - right margin) / 4,
+   * i.e. the page column (348 at 1440). Phones use half the content width.
+   */
+  .gallery {
+    container-type: inline-size;
+    margin-left: var(--grid-margin);
+    overflow: hidden;
+    --col: calc((100cqw - var(--grid-margin)) / 4);
+    --film-h: min(calc(var(--col) * var(--film-image-ratio)), calc(100svh - 200px));
+  }
+
+  .track {
+    position: relative; /* slides' offsetLeft is measured from the track */
+    display: flex;
+    /* Ends on the last column rule instead of the viewport edge */
+    padding-right: var(--grid-margin);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    cursor: grab;
+    /* Opaque: slides draw their own rules, so the page grid must not show through */
+    background: var(--bg-base);
+  }
+  .track::-webkit-scrollbar { display: none; }
+  .track:focus-visible { outline-offset: -2px; }
+
+  /* While dragging, snapping and smooth scrolling are off (set by gallery.ts) */
+  .track:global(.is-dragging) {
+    scroll-snap-type: none;
+    scroll-behavior: auto;
+    cursor: grabbing;
+    user-select: none;
+  }
+
+  .slide {
+    flex: none;
+    width: calc(var(--span) * var(--col));
+    scroll-snap-align: start;
+    /* A 1px rule at every column edge the slide covers; the image hides the inner ones */
+    background: linear-gradient(to right, var(--line-grid) 1px, transparent 1px) 0 0 / var(--col) 100% repeat-x;
+  }
+  /* Closing rule after the last slide */
+  .slide:last-child { box-shadow: 1px 0 0 var(--line-grid); }
+
+  .frame {
+    height: var(--film-h);
+    margin-left: 1px; /* the gap that shows the column rule */
+    background: var(--bg-raised);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+  }
+
+  .frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+  }
+
+  /* Caption cell: one grid row tall, number over up to two lines of text */
+  .caption {
+    height: var(--grid-row);
+    padding: var(--grid-inset);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+
+  .text {
+    max-width: 316px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Controls on the page columns: hint | progress (cols 2-3) | counter + arrows */
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(4, var(--col));
+    min-height: var(--space-64);
+    align-items: center;
+  }
+  .controls[hidden] { display: none; }
+
+  .hint,
+  .progress-cell,
+  .nav { padding-inline: var(--grid-inset); }
+
+  .progress-cell { grid-column: 2 / 4; }
+
+  .progress {
+    height: 2px;
+    background: var(--line-grid);
+    overflow: hidden;
+  }
+
+  /* Thumb = visible share of the strip; gallery.ts sets --thumb-w and --thumb-x */
+  .thumb {
+    height: 100%;
+    width: calc(var(--thumb-w, 0.3) * 100%);
+    background: var(--accent-signal);
+    transform: translateX(calc(var(--thumb-x, 0) * 100%));
+    will-change: transform;
+  }
+
+  .nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .counter { font-variant-numeric: tabular-nums; }
+
+  .hint-coarse { display: none; }
+  @media (pointer: coarse) {
+    .hint-fine { display: none; }
+    .hint-coarse { display: inline; }
+    .track { scroll-snap-type: x mandatory; cursor: auto; }
+  }
+
+  .arrows {
+    flex: none;
+    display: flex;
+    /* 44px hit areas, but the group takes Figma's 64 x 29 footprint in the row */
+    margin: -7.5px -10px -7.5px -14px;
+  }
+
+  .arrows button {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    color: var(--text-primary);
+    transition: color var(--dur-fast) var(--ease-out);
+  }
+  .arrows button:hover:not(:disabled) { color: var(--accent-signal); }
+  .arrows button:disabled { color: var(--text-tertiary); cursor: default; }
+
+  /* Phones: two slide columns per screen width; controls = progress | counter + arrows */
+  @media (max-width: 767px) {
+    .gallery { --col: calc((100cqw - var(--grid-margin)) / 2); }
+    .caption { height: auto; min-height: var(--space-64); }
+    .text { max-width: none; }
+    .track { scroll-snap-type: x mandatory; }
+    .controls { grid-template-columns: 1fr auto; }
+    .hint { display: none; }
+    .progress-cell { grid-column: 1; }
+    .nav { gap: var(--space-24); }
+  }
+</style>
+
+<script>
+  import { initGalleries } from '../scripts/gallery';
+  initGalleries();
+</script>

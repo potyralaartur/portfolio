@@ -1,0 +1,64 @@
+/*
+ * PTRL / Color and PTRL / Space & Grid, 1:1 with the Figma variables
+ * (file "Portfolio 2026", fY4gywviyyZXx6RV1X5bUG). Figma "a/b" -> CSS "--a-b".
+ * Components use these properties only; no raw colors or spacing values.
+ */
+:root {
+  /* Color (mode: Dark) */
+  --bg-base: #0c0c0c;
+  --bg-raised: #151515;
+  --text-primary: #f2f1ee;
+  --text-secondary: rgb(242 241 238 / 0.56); /* 5.84:1 on bg-base */
+  /*
+   * DESIGN DECISION PENDING: Figma has 36%, which is 3.04:1 on bg-base and
+   * fails WCAG AA for 11px text. 48% gives 4.55:1. Set back to 0.36 to match
+   * Figma exactly, or update the Figma variable to 48%.
+   */
+  --text-tertiary: rgb(242 241 238 / 0.48);
+  --line-grid: rgb(242 241 238 / 0.12);
+  --accent-signal: #ff4b1f;
+  --accent-on-signal: #0c0c0c;
+
+  /* Space */
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-16: 16px;
+  --space-24: 24px;
+  --space-40: 40px;
+  --space-64: 64px;
+  --space-120: 120px;
+
+  /* Grid: 4 columns, no gutter. 348px columns at a 1440 viewport. */
+  --grid-margin: 24px;
+  --grid-columns: 4;
+  --grid-row: 120px;
+  --grid-inset: var(--space-16); /* text inset inside a column */
+
+  /* Gallery (filmstrip): slides span 1-3 grid columns, image 600 tall at 1440.
+     Column unit and image height are set in Gallery.astro from the gallery width. */
+  --film-image-ratio: calc(600 / 348); /* image height per column width */
+
+  /* Layout (code only, not in Figma) */
+  --nav-h: 56px; /* sticky nav bar */
+
+  /* Fonts (swap --font-sans for the licensed neo-grotesk later) */
+  --font-sans: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  --font-mono: 'Fragment Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 150ms;
+}
+
+@media (max-width: 1023px) {
+  :root {
+    --grid-columns: 2;
+  }
+}
+
+@media (max-width: 767px) {
+  :root {
+    --grid-columns: 1;
+    --grid-margin: 16px;
+  }
+}

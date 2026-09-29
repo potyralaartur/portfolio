@@ -1,0 +1,50 @@
+---
+/**
+ * Sticky nav (not in Figma, proposal). Shown by scripts/nav.ts once the hero
+ * has scrolled out of view. Hidden = visibility: hidden, so it is out of the
+ * tab order and the accessibility tree until it appears.
+ */
+import Logo from './Logo.astro';
+import { sections } from '../data/site';
+---
+<nav class="sticky-nav" aria-label="Sections" data-sticky-nav>
+  <a class="home" href="#" aria-label="Back to top"><Logo width={72} /></a>
+  <ul class="links">
+    {sections.map((s) => <li><a class="t-label-m c-secondary" href={s.href}>{s.text}</a></li>)}
+  </ul>
+</nav>
+
+<style>
+  .sticky-nav {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 10;
+    height: var(--nav-h);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-inline: calc(var(--grid-margin) + var(--grid-inset));
+    background: var(--bg-base);
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  .home,
+  .links a {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .links {
+    display: flex;
+    /* links carry their own padding for 44px targets; keep the text on the 16 inset */
+    margin-inline-end: calc(-1 * var(--space-8));
+  }
+
+  .links a {
+    min-width: 44px;
+    justify-content: center;
+    padding-inline: var(--space-8);
+  }
+</style>

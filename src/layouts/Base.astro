@@ -1,0 +1,82 @@
+---
+import '../styles/global.css';
+interface Props {
+  title: string;
+  description: string;
+  /** Page has the hero tag: run the WebGL spray intro gate */
+  spray?: boolean;
+  noindex?: boolean;
+}
+const { title, description, spray = false, noindex = false } = Astro.props;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {noindex && <meta name="robots" content="noindex" />}
+    <meta name="theme-color" content="#0c0c0c" />
+    <link rel="icon" href={`${import.meta.env.BASE_URL.replace(/\/?$/, '/')}favicon.svg`} type="image/svg+xml" />
+    {spray && import.meta.env.DEV && (
+      <script is:inline>
+        // Dev only (never built): ?force=reduced|nowebgl2|caveat|savedata|slowboot fakes the
+        // condition the way DevTools would, before the gate below runs. ?shim: see below.
+        (function () {
+          var q = new URLSearchParams(location.search);
+          // ?shim: rAF via setTimeout and a visible document (hidden automation panes never fire rAF)
+          if (q.has('shim')) {
+            window.requestAnimationFrame = function (cb) { return setTimeout(function () { cb(performance.now()); }, 16); };
+            window.cancelAnimationFrame = clearTimeout;
+            Object.defineProperty(document, 'hidden', { get: function () { return false; } });
+            Object.defineProperty(document, 'visibilityState', { get: function () { return 'visible'; } });
+          }
+          var f = q.get('force');
+          if (!f) return;
+          if (f === 'reduced') {
+            var mm = window.matchMedia.bind(window);
+            window.matchMedia = function (q) {
+              if (q.indexOf('prefers-reduced-motion: reduce') > -1) return { matches: true, media: q, addEventListener: function () {}, removeEventListener: function () {} };
+              return mm(q);
+            };
+          }
+          if (f === 'nowebgl2') delete window.WebGL2RenderingContext;
+          if (f === 'caveat') {
+            var gc = HTMLCanvasElement.prototype.getContext;
+            HTMLCanvasElement.prototype.getContext = function (type, attrs) {
+              if (type === 'webgl2' && attrs && attrs.failIfMajorPerformanceCaveat) return null;
+              return gc.apply(this, arguments);
+            };
+          }
+          if (f === 'savedata') Object.defineProperty(navigator, 'connection', { value: { saveData: true } });
+          if (f === 'slowboot') {
+            // Idle never comes in time: the 1.2 s head timeout must show the SVG
+            window.requestIdleCallback = function (cb) { return setTimeout(cb, 2000); };
+          }
+        })();
+      </script>
+    )}
+    {spray && (
+      <script is:inline>
+        // Spray gate: html.spray hides the SVG tag until the WebGL canvas takes
+        // over. Only with motion allowed, no Save-Data and WebGL2. If the canvas
+        // isn't live after 1.2s of visible time (look.bootTimeout), show the
+        // SVG and skip. A background tab waits until it's shown.
+        (function () {
+          var d = document.documentElement, c = navigator.connection;
+          if (matchMedia('(prefers-reduced-motion: reduce)').matches || (c && c.saveData) || !window.WebGL2RenderingContext) return;
+          d.classList.add('spray');
+          var t;
+          function arm() { clearTimeout(t); if (!document.hidden) t = setTimeout(give, 1200); }
+          function give() { if (!d.classList.contains('spray-live')) d.classList.remove('spray'); document.removeEventListener('visibilitychange', arm); }
+          document.addEventListener('visibilitychange', arm);
+          arm();
+        })();
+      </script>
+    )}
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

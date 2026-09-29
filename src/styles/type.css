@@ -1,0 +1,86 @@
+/*
+ * Text styles from Figma. Letter spacing is in percent there, so em here.
+ * Display and heading sizes are fluid and cap at their 1440 value.
+ */
+.t-display-xl {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: clamp(64px, 11.111vw, 160px);
+  line-height: 0.92;
+  letter-spacing: -0.05em;
+}
+
+.t-display-l {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: clamp(44px, 6.667vw, 96px);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+
+/* Display/M: case study titles */
+.t-display-m {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: clamp(36px, 4.444vw, 64px);
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.t-heading-m {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: clamp(28px, 2.778vw, 40px);
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+}
+
+.t-heading-s {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 24px;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+
+.t-body-l {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 20px;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+}
+
+.t-body-m {
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 20px;
+  letter-spacing: -0.005em;
+}
+
+.t-label-m {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.t-mono-body {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: 13px;
+}
+
+.c-primary { color: var(--text-primary); }
+.c-secondary { color: var(--text-secondary); }
+.c-tertiary { color: var(--text-tertiary); }
+
+/* The orange full stop at the end of every display title */
+.stop { color: var(--accent-signal); }
+
+@media (max-width: 767px) {
+  .t-body-l { font-size: 18px; line-height: 26px; }
+}

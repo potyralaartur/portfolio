@@ -1,0 +1,32 @@
+---
+/** Figma "Info Block" (10:7): mono label over short body copy, one grid column, 16 inset. */
+import type { Info } from '../data/site';
+interface Props extends Info { class?: string }
+const { label, lines, class: className } = Astro.props;
+---
+<div class:list={['info', 'cell', className]}>
+  <p class="t-label-m c-secondary">{label}</p>
+  <p class="t-body-m c-primary">
+    {lines.map((line, i) => (
+      <>
+        {line.href ? (
+          <a href={line.href} {...(line.external ? { target: '_blank', rel: 'noopener' } : {})}>
+            {line.text}{line.external && <span aria-hidden="true"> ↗</span>}
+            {line.external && <span class="visually-hidden"> (opens in a new tab)</span>}
+          </a>
+        ) : (
+          line.text
+        )}
+        {i < lines.length - 1 && <br />}
+      </>
+    ))}
+  </p>
+</div>
+
+<style>
+  .info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+</style>

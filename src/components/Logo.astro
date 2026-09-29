@@ -1,0 +1,11 @@
+---
+/** Figma "Logo / PTRL." (10:6), flat version for small sizes. Scale proportionally. */
+import { LETTERS_D, STOP_D, LOGO_VIEWBOX } from '../data/logo';
+interface Props { width?: number; class?: string }
+const { width = 180, class: className } = Astro.props;
+const height = Math.round((width * LOGO_VIEWBOX.h) / LOGO_VIEWBOX.w);
+---
+<svg class={className} width={width} height={height} viewBox={`0 0 ${LOGO_VIEWBOX.w} ${LOGO_VIEWBOX.h}`} role="img" aria-label="PTRL.">
+  <path fill-rule="evenodd" clip-rule="evenodd" d={LETTERS_D} fill="var(--text-primary)" />
+  <path d={STOP_D} fill="var(--accent-signal)" />
+</svg>
