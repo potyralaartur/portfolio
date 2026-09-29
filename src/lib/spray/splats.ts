@@ -304,7 +304,7 @@ export class StrokeEmitter implements Emitter {
       out[o + 4] = hardness;
       // Core and fog of a white stroke keep their own density per channel; the rest goes to the paint buffer
       const ch = opts.channel + 1;
-      // Core: the mask of the part the nozzle is in (between turns); odd parts' masks are in A
+      // Core: the mask of the part the nozzle is in (between turns); odd parts' masks are in stroke-masks-odd.png
       const part = opts.splits ? opts.splits.filter((t) => t <= s).length : 0;
       out[o + 5] = layer.clip ? ch + (part % 2 ? ODD_PART : 0) : !layer.ring && !opts.orange ? -ch : 0;
       out[o + 6] = opts.orange ? 1 : 0;

@@ -5,7 +5,9 @@
  *   src/lib/spray/reference/strokes.json -> drips + full stop (and a check that
  *                              strokes.svg's centerlines still match it)
  *   (generated)                -> src/lib/spray/blue-noise.png (grain tile, void-and-cluster)
- *   centerlines + mask         -> src/lib/spray/stroke-masks.png (each stroke's own core clip, 3 channels)
+ *   centerlines + mask         -> src/lib/spray/stroke-masks.png (each stroke's own core clip, RGB) and
+ *                                 stroke-masks-odd.png (the parts split at turns, gray). No alpha: WebKit
+ *                                 premultiplies PNGs on decode, which zeroes RGB wherever A is 0
  *
  * Run: npm run spray:paths. Node >= 23.6 strips the .ts imports natively.
  */
@@ -337,7 +339,7 @@ writeFileSync(root('src/lib/spray/logo-mask.png'), encodePng(Uint8Array.from(out
     channel.push(c);
     strokes[k].channel = c;
   }
-  // Odd parts share A: no two may come within gap of each other
+  // Odd parts share one mask (stroke-masks-odd.png): no two may come within gap of each other
   const odd = parts.filter((pt) => pt.odd);
   for (let a = 0; a < odd.length; a++) {
     for (let b = a + 1; b < odd.length; b++) {
@@ -347,18 +349,22 @@ writeFileSync(root('src/lib/spray/logo-mask.png'), encodePng(Uint8Array.from(out
       if (best - half[odd[a].k] - half[odd[b].k] < SM.gap) throw new Error(`odd parts of ${strokes[odd[a].k].id} and ${strokes[odd[b].k].id} too close for one mask channel`);
     }
   }
-  const out = new Uint8Array(W * H * 4);
+  const out = new Uint8Array(W * H * 3);
+  const outOdd = new Uint8Array(W * H);
   masks.forEach((m, n) => {
-    const c = parts[n].odd ? 3 : channel[parts[n].k];
+    const odd = parts[n].odd;
+    const c = channel[parts[n].k];
     for (let i = 0; i < W * H; i++) {
-      const o = i * 4 + c;
-      out[o] = Math.max(out[o], Math.round(m[i] * 255));
+      const v = Math.round(m[i] * 255);
+      if (odd) outOdd[i] = Math.max(outOdd[i], v);
+      else out[i * 3 + c] = Math.max(out[i * 3 + c], v);
     }
   });
-  writeFileSync(root('src/lib/spray/stroke-masks.png'), encodePng(out, W, H, 4));
+  writeFileSync(root('src/lib/spray/stroke-masks.png'), encodePng(out, W, H, 3));
+  writeFileSync(root('src/lib/spray/stroke-masks-odd.png'), encodePng(outOdd, W, H, 1));
   writeFileSync(root('src/lib/spray/paths.json'), JSON.stringify(data));
   const rgb = 'RGB';
-  console.log(`stroke masks ${W}x${H}, ${(sliverCount / px / px).toFixed(1)} sq units of outline slivers; channels ${strokes.map((s, k) => `${s.id}:${rgb[channel[k]]}`).join(' ')}; ${odd.length} parts in A (${odd.map((pt) => strokes[pt.k].id).join(', ')})`);
+  console.log(`stroke masks ${W}x${H}, ${(sliverCount / px / px).toFixed(1)} sq units of outline slivers; channels ${strokes.map((s, k) => `${s.id}:${rgb[channel[k]]}`).join(' ')}; ${odd.length} odd parts (${odd.map((pt) => strokes[pt.k].id).join(', ')})`);
 }
 
 /** Standard normal CDF (Abramowitz-Stegun 7.1.26 erf, |error| < 1.5e-7) */

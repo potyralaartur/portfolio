@@ -5,7 +5,8 @@
  * (2) one InstancedMesh of soft round splats, additive. Then swap.
  * The white strokes' core and fog go to their own targets instead (no decay,
  * so no ping-pong): each stroke keeps its own density in its mask channel
- * (R, G, B of stroke-masks.png), its core clipped by its own mask. The
+ * (R, G, B of stroke-masks.png; parts split at turns in stroke-masks-odd.png),
+ * its core clipped by its own mask. The
  * composite combines the strokes, so an overlap isn't painted or fogged twice.
  * The paint buffer keeps the orange (full stop), speckle and wetness (drips are drawn by the composite).
  */
@@ -145,7 +146,10 @@ void main() {
 const SPLAT_FRAG = /* glsl */ `
 precision highp float;
 #define ODD_PART ${ODD_PART.toFixed(1)}
-uniform sampler2D uMasks; // stroke-masks.png over MASK_RECT: RGB one per stroke colour, A strokes' odd parts
+// Over MASK_RECT, both opaque: an alpha channel isn't safe for data (WebKit premultiplies on decode,
+// which zeroes RGB wherever A is 0)
+uniform sampler2D uMasks; // stroke-masks.png: RGB one per stroke colour
+uniform sampler2D uMasksOdd; // stroke-masks-odd.png: the strokes' odd parts, in R
 uniform vec2 uRough; // edge roughness, wobble cell (logo units)
 uniform vec4 uMaskRect; // x, y, w, h in logo units (MASK_RECT)
 uniform vec2 uClip; // smoothstep window on the soft mask: density can't push the edge outward
@@ -169,7 +173,6 @@ void main() {
   bool odd = vParams.z > ODD_PART;
   int ch = int(abs(vParams.z) - (odd ? ODD_PART : 0.0) + 0.5) - 1;
   vec3 sel = vec3(ch == 0, ch == 1, ch == 2);
-  vec4 maskSel = odd ? vec4(0.0, 0.0, 0.0, 1.0) : vec4(sel, 0.0);
   if (uPass == 2) {
     color = vec4(sel * a, 0.0);
     return;
@@ -180,7 +183,8 @@ void main() {
     vec2 jitter = 0.67 * vnoise2(vWorld / uRough.y, 11) + 0.33 * vnoise2(vWorld * 2.0 / uRough.y, 12) - 0.5;
     vec2 uv = (vWorld + jitter * uRough.x - uMaskRect.xy) / uMaskRect.zw;
     float inside = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
-    a *= smoothstep(uClip.x, uClip.y, dot(texture(uMasks, uv), maskSel)) * inside;
+    float m = odd ? texture(uMasksOdd, uv).r : dot(texture(uMasks, uv).rgb, sel);
+    a *= smoothstep(uClip.x, uClip.y, m) * inside;
   }
   if (uPass == 1) {
     // The white core: this stroke's density in its channel
@@ -213,7 +217,13 @@ export interface Paint {
   dispose(): void;
 }
 
-export function createPaint(engine: Engine, masks: Texture): Paint {
+/** The strokes' core masks (build script): RGB one per stroke colour, and the odd parts */
+export interface StrokeMasks {
+  rgb: Texture;
+  odd: Texture;
+}
+
+export function createPaint(engine: Engine, masks: StrokeMasks): Paint {
   const { renderer, camera } = engine;
   const gl = renderer.getContext() as WebGL2RenderingContext;
   const canHalf = !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'));
@@ -276,7 +286,8 @@ export function createPaint(engine: Engine, masks: Texture): Paint {
     vertexShader: SPLAT_VERT,
     fragmentShader: SPLAT_FRAG,
     uniforms: {
-      uMasks: { value: masks },
+      uMasks: { value: masks.rgb },
+      uMasksOdd: { value: masks.odd },
       uMaskRect: { value: [MASK_RECT.x, MASK_RECT.y, MASK_RECT.w, MASK_RECT.h] },
       uClip: { value: look.mask.clip },
       uRough: { value: [look.mask.roughness, look.mask.roughCell] },

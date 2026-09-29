@@ -16,6 +16,7 @@ import paths from './paths.json';
 import { DripEmitter, emitAll, StrokeEmitter, type DripData, type Emitter, type StrokeData } from './splats';
 import { createIntroTimeline, createScroll } from './timeline';
 import masksUrl from './stroke-masks.png?url';
+import masksOddUrl from './stroke-masks-odd.png?url';
 import grainUrl from './blue-noise.png?url';
 
 /** Every stroke, every layer, the drips */
@@ -51,14 +52,17 @@ export async function startSpray(opts: EngineOptions) {
       opts.onFail(reason);
     },
   });
-  const [masks, grain] = await Promise.all([
+  const [rgb, odd, grain] = await Promise.all([
     loadTexture(masksUrl),
+    loadTexture(masksOddUrl),
     loadTexture(grainUrl, { repeat: true, nearest: true }),
   ]);
+  const masks = { rgb, odd };
   // The head timeout may have shown the SVG while the textures loaded
   if (!root.classList.contains('spray')) {
     engine.dispose();
-    masks.dispose();
+    rgb.dispose();
+    odd.dispose();
     grain.dispose();
     return null;
   }
