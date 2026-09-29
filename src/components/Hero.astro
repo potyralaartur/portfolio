@@ -1,5 +1,5 @@
 ---
-/** Figma "Hero" (31:181): masthead row, sprayed tag, meta row, 4 x 8 field grid drawn over the tag. */
+/** Figma "Hero" (31:181): masthead row, sprayed tag, meta row, 4 x n field grid drawn over the tag. */
 import InfoBlock from './InfoBlock.astro';
 import Tag from './Tag.astro';
 import { masthead, heroMeta, person } from '../data/site';
@@ -28,6 +28,18 @@ import { masthead, heroMeta, person } from '../data/site';
   </div>
 </header>
 
+<!-- Inline, right after the hero: the row count is set before the first paint, so rows never jump -->
+<script is:inline>
+  (() => {
+    const hero = document.querySelector('[data-hero]');
+    if (!hero) return;
+    const min = parseFloat(getComputedStyle(hero).getPropertyValue('--grid-row')) || 120;
+    const fit = () => hero.style.setProperty('--hero-rows', String(Math.max(3, Math.floor(hero.clientHeight / min))));
+    fit();
+    addEventListener('resize', fit); // the hero is one screen tall, so only a viewport resize changes it
+  })();
+</script>
+
 <style>
   .hero {
     position: relative; /* for .fields */
@@ -37,13 +49,19 @@ import { masthead, heroMeta, person } from '../data/site';
     height: 100svh;
     display: flex;
     flex-direction: column;
+    /*
+     * n equal rows: as many as fit at least 120 tall (the masthead needs 116),
+     * so 8 x 120 at 1440 x 960 like in Figma, 6 x 130 at 780, 11 x 120 at 1324.
+     * The inline script below sets --hero-rows from the hero's height. Whole
+     * pixels keep the lines crisp; the meta row takes the < n px left over.
+     */
+    --hero-row: round(down, calc(100svh / var(--hero-rows, 8)), 1px);
   }
 
   /*
-   * Column rules (full height) and row rules. Rows 1 and 8 are the masthead and
-   * meta rows (120 each); the tag area between them splits into 6 equal rows,
-   * so at 1440 x 960 every field is 120 like in Figma, and at other heights the
-   * lines still close exactly on the meta row.
+   * Column rules (full height) and row rules. The masthead takes the top row
+   * (two on tablets, where its blocks wrap), the meta row the bottom one, and
+   * the tag area between them is ruled every --hero-row down to the meta row.
    */
   .fields {
     position: absolute;
@@ -60,18 +78,20 @@ import { masthead, heroMeta, person } from '../data/site';
     inset: 0 calc(var(--grid-margin) - 1px) 0 var(--grid-margin);
     border-right: 1px solid var(--line-grid);
     background: linear-gradient(to right, var(--line-grid) 1px, transparent 1px) 0 0 /
-      calc(100% / var(--grid-columns)) 100% repeat-x;
+      calc(100% / var(--grid-columns)) 1px repeat; /* 1px tile: see .page-grid */
     background-clip: padding-box; /* keep the last tile out from under the border */
   }
   .fields::after {
-    inset: var(--grid-row) var(--grid-margin);
+    /* Exactly n - 2 whole rows, so the leftover pixels fall below the meta line */
+    inset: var(--hero-row) var(--grid-margin) auto;
+    height: calc(var(--hero-row) * (var(--hero-rows, 8) - 2));
     box-shadow: 0 1px 0 var(--line-grid); /* the line on top of the meta row */
-    background: linear-gradient(to bottom, var(--line-grid) 1px, transparent 1px) 0 0 / 100% calc(100% / 6) repeat-y;
-    /* Whole-pixel rows keep the lines crisp when the tag area isn't a multiple of 6 */
-    background-size: 100% round(calc(100% / 6), 1px);
+    background: linear-gradient(to bottom, var(--line-grid) 1px, transparent 1px) 0 0 / 100% var(--hero-row) repeat-y;
   }
 
+  /* Each line of info blocks is one row (tablets wrap the four blocks onto two) */
   .masthead {
+    grid-auto-rows: minmax(var(--hero-row), auto);
     align-items: start;
   }
 
@@ -86,7 +106,6 @@ import { masthead, heroMeta, person } from '../data/site';
     display: flex;
     align-items: center;
     padding-inline: var(--grid-margin);
-    margin-top: var(--space-4);
   }
   .stage :global(.tag) {
     width: min(100cqw, 100cqh * 1392 / 720);
@@ -94,7 +113,7 @@ import { masthead, heroMeta, person } from '../data/site';
   }
 
   .meta {
-    min-height: var(--grid-row);
+    height: var(--hero-row);
     align-items: end;
   }
 
@@ -143,13 +162,13 @@ import { masthead, heroMeta, person } from '../data/site';
    * side and a slim meta row, so the one-screen hero leaves the tag room
    */
   @media (max-width: 767px), (max-height: 560px) {
-    .fields::after { display: none; } /* rows assume 120px masthead and meta rows: column rules only */
-    .masthead { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .fields::after { display: none; } /* no room for 120px rows: column rules only */
+    .masthead { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; }
     .masthead > :global(:nth-child(2)),
     .masthead > :global(:nth-child(3)) { display: none; }
     /* Trim the empty band of the 1392 x 720 viewBox (paint sits at y ~100-690); % margins follow width */
     .stage :global(.tag) { margin-block: -7% -2%; }
-    .meta { grid-template-columns: 1fr auto; min-height: auto; }
+    .meta { grid-template-columns: 1fr auto; height: auto; }
     .meta p:nth-child(2) { display: none; }
   }
 </style>
