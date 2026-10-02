@@ -1,5 +1,5 @@
 ---
-/** Figma "Hero" (31:181): masthead row, sprayed tag, meta row, 4 x n field grid drawn over the tag. */
+/** Figma "Hero" (31:181): masthead row, sprayed tag, meta row, 4 x n field grid behind the tag. */
 import InfoBlock from './InfoBlock.astro';
 import Tag from './Tag.astro';
 import { masthead, heroMeta, person } from '../data/site';
@@ -11,12 +11,12 @@ import { masthead, heroMeta, person } from '../data/site';
     {masthead.map((block) => <InfoBlock {...block} />)}
   </nav>
 
+  <!-- Figma "Grid / 4 × 8 fields" (31:197): before the stage, so the paint covers the rules -->
+  <div class="fields" aria-hidden="true"></div>
+
   <div class="stage">
     <Tag />
   </div>
-
-  <!-- Figma "Grid / 4 × 8 fields" (31:197): sits above the tag, like the rules on a poster -->
-  <div class="fields" aria-hidden="true"></div>
 
   <div class="row meta t-label-m">
     <p class="cell c-secondary">{heroMeta.coordinates}</p>
@@ -66,8 +66,7 @@ import { masthead, heroMeta, person } from '../data/site';
   .fields {
     position: absolute;
     inset: 0;
-    z-index: 1;
-    pointer-events: none;
+    pointer-events: none; /* no z-index: the tag (positioned, later in the DOM) paints over it */
   }
   .fields::before,
   .fields::after {
